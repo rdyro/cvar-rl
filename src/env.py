@@ -137,12 +137,15 @@ class DiscretePolicy(Policy):
   def choose_action_discrete(self, s, n):
     return super().choose_action_discrete(s, n, self.amin, self.amax)
 
-class MaxDiscretePolicy(Policy):
+class OptimalDiscretePolicy(Policy):
   def __init__(self, sdim, amin, amax, n):
-    super().__init__(sdim, amin, amax, n)
+    super().__init__(sdim, amin, amax, n, env, value_function)
+    self.value_function = value_function
+    self.env = env
 
-  def choose_action(self, s, v, pol_it):
-    V = np.array([pol_it.qvalue(s, a).reshape(-1) for a in self.aspc])
+  def choose_action(self, s):
+    V = np.array([self.value_function.qvalue(self.env, s, a).reshape(-1) for a
+      in self.aspc])
     a_argmax = np.argmax(V, axis=0)
     return self.aspc[a_argmax, 0:]
 
@@ -157,6 +160,9 @@ class ValueFunction:
     self.sdim = sdim
 
   def value(self, s):
+    raise NotImplementedError
+
+  def qvalue(self, env, s, a):
     raise NotImplementedError
 
 class TabularValueFunction(ValueFunction):
@@ -180,6 +186,24 @@ class TabularValueFunction(ValueFunction):
     s = make3D(s, self.sdim)
     sidx = self._sidx(s)
     return self.value_table[sidx]
+
+  def qvalue(self, env, s, a):
+    s = make3D(s, self.sdim)
+    a = make3D(a, self.adim)
+
+    (d, p) = env.disturb()
+    d = make3D(d, self.sdim + self.adim).transpose((2, 1, 0))
+    p = make3D(p, 1)
+    s += d[:, 0:self.env.sdim, :]
+    a += d[:, self.env.sdim:, :]
+
+    ns = env.next_state(s, a)
+    v = self.value(ns)
+    r = env.reward(s, a, ns)
+
+    expected_v = make3D(np.sum(p * (r + env.gamma * v), axis=2), 1)
+
+    return expected_v
 
   def set_value(self, s, v):
     v = make3D(v, 1)
@@ -329,7 +353,7 @@ class DiscreteEnvironment(Environment):
 
 
 # Value Iteration #############################################################
-class PolicyIteration:
+class PolicyIterationSolver:
   def __init__(self, env, pol):
     self.env = env
     self.pol = pol
@@ -337,10 +361,7 @@ class PolicyIteration:
   def iterate(self):
     raise NotImplementedError
 
-  def qvalue(self, s, a):
-    raise NotImplementedError
-
-class TabularPolicyIteration:
+class TabularPolicyIterationSolver(PolicyIterationSolver):
   def __init__(self, env, pol, sn, an):
     super().__init__(env, pol)
     self.value_function = TabularValueFunction(env.smin, env.smax, sn)
@@ -349,25 +370,8 @@ class TabularPolicyIteration:
 
   def iterate(self):
     a = self.pol.choose_action(self.all_s)
-    expected_v = self.qvalue(self._all_s, a)
+    expected_v = self.value_function.qvalue(self.env, self._all_s, a)
     dv = self.value_function.set_value(all_s, expected_v)
 
     return dv
-
-  def qvalue(self, s, a):
-    a = make3D(a, self.env.adim)
-
-    (d, p) = self.env.disturb()
-    d = make3D(d, self.sdim + self.adim).transpose((2, 1, 0))
-    p = make3D(p, 1)
-    self.all_s += d[:, 0:self.env.sdim, :]
-    self.a += d[:, self.env.sdim:, :]
-
-    ns = self.env.next_state(all_s, a)
-    v = self.value_function.value(ns)
-    r = self.env.reward(all_s, a, ns)
-
-    expected_v = make3D(np.sum(p * (r + self.env.gamma * v), axis=2), 1)
-
-    return expected_v
 ###############################################################################
