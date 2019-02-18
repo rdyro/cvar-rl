@@ -98,6 +98,13 @@ goals = 1.0 * fl._is_in_discrete(ns, fl.goals).reshape((n, n))
 pl.figure(7)
 pl.imshow(holes + goals)
 
+# Solver Tests ################################################################
+n = 10
+pol = OptimalDiscretePolicy(fl.sdim, fl.amin, fl.amax, n)
+sol = TabularDiscreteSolver(fl, pol, 10)
+print(sol.iterate())
+
+
 # RK4 test ####################################################################
 N = 50
 K = 20

@@ -39,6 +39,14 @@ def rk4_fn(f, x, t, tn, h, p):
 def make3D(x, xdim):
   return (np.array(x).reshape((-1, xdim, 1)) if len(np.shape(x)) <= 2 else
       np.array(x))
+
+def match_03(*args):
+  args = [np.array(arg) for arg in args]
+  max_shape = np.max([arg.shape for arg in args], axis=0)
+  args = [arg if arg.shape[0] == max_shape[0] and arg.shape[2] == max_shape[2]
+      else np.copy(np.broadcast_to(arg, (max_shape[0], arg.shape[1],
+        max_shape[2]))) for arg in args]
+  return args
 ###############################################################################
 
 # POLICIES ####################################################################
@@ -46,6 +54,8 @@ class Policy:
   def __init__(self, sdim, adim):
     self.sdim = sdim
     self.adim = adim
+    self.env = None
+    self.value_function = None
 
   def choose_action(self, s):
     raise NotImplementedError
@@ -62,6 +72,11 @@ class Policy:
     a = np.clip(a, amin, amax)
     a = np.round((n - 1) * (a - amin) / (amax - amin)).astype(int) / (n - 1)
     return a
+
+  def set_env(self, env):
+    self.env = env
+  def set_value_function(self, value_function):
+    self.value_function = value_function
 
 class UnifRandPolicy(Policy):
   def __init__(self, sdim, amin, amax):
@@ -114,9 +129,9 @@ class MultNormRandPolicy(Policy):
 
 class DiscretePolicy(Policy):
   def __init__(self, sdim, amin, amax, n):
-    assert np.size(amin) == np.size(amax)
-    assert np.size(n) == 1 or np.size(n) == np.size(amin)
     super().__init__(sdim, np.size(amin))
+    assert self.adim == np.size(amax)
+    assert np.size(n) == 1 or np.size(n) == np.size(amin)
     self.amin = make3D(amin, self.adim)
     self.amax = make3D(amax, self.adim)
     self.n = (make3D(n, self.adim).astype(int) if np.size(n) > 1 else
@@ -137,15 +152,13 @@ class DiscretePolicy(Policy):
   def choose_action_discrete(self, s, n):
     return super().choose_action_discrete(s, n, self.amin, self.amax)
 
-class OptimalDiscretePolicy(Policy):
+class OptimalDiscretePolicy(DiscretePolicy):
   def __init__(self, sdim, amin, amax, n):
-    super().__init__(sdim, amin, amax, n, env, value_function)
-    self.value_function = value_function
-    self.env = env
+    super().__init__(sdim, amin, amax, n)
 
   def choose_action(self, s):
-    V = np.array([self.value_function.qvalue(self.env, s, a).reshape(-1) for a
-      in self.aspc])
+    V = np.array([self.value_function.qvalue(self.env, s, self.aspc[i:i+1, :,
+      :]).reshape(-1) for i in range(self.aspcdim)])
     a_argmax = np.argmax(V, axis=0)
     return self.aspc[a_argmax, 0:]
 
@@ -167,14 +180,15 @@ class ValueFunction:
 
 class TabularValueFunction(ValueFunction):
   def __init__(self, smin, smax, n):
-    sdim = np.size(smin)
-    assert sdim == np.size(smax)
-    assert np.size(n) == 1 or np.size(n) == sdim
-    super().__init__(sdim)
+    super().__init__(np.size(smin))
+    assert self.sdim == np.size(smax)
+    assert np.size(n) == 1 or np.size(n) == self.sdim
     self.n = (make3D(n).astype(int) if np.size(n) > 1 else
-        make3D(np.repeat(int(n), self.adim), self.adim))
+        make3D(np.repeat(int(n), self.sdim), self.sdim))
+    self.smin = make3D(smin, self.sdim)
+    self.smax = make3D(smax, self.sdim)
     self.sspcdim = np.prod(self.n)
-    self.value_table = np.zeros(sspcdim)
+    self.value_table = np.zeros(self.sspcdim)
 
   def _sidx(self, s):
     s_idx = np.round((self.n - 1) * (s - self.smin) / (self.smax -
@@ -188,14 +202,16 @@ class TabularValueFunction(ValueFunction):
     return self.value_table[sidx]
 
   def qvalue(self, env, s, a):
+    assert self.sdim == env.sdim
+    adim = np.shape(a)[1] if len(np.shape(a)) > 1 else np.shape(a)[0]
     s = make3D(s, self.sdim)
-    a = make3D(a, self.adim)
+    a = make3D(a, adim)
 
     (d, p) = env.disturb()
-    d = make3D(d, self.sdim + self.adim).transpose((2, 1, 0))
+    d = make3D(d, self.sdim + adim).transpose((2, 1, 0))
     p = make3D(p, 1)
-    s += d[:, 0:self.env.sdim, :]
-    a += d[:, self.env.sdim:, :]
+    s = s + d[:, 0:env.sdim]
+    a = a + d[:, env.sdim:]
 
     ns = env.next_state(s, a)
     v = self.value(ns)
@@ -262,7 +278,7 @@ class FrozenLake(Environment):
 
     self.gamma = 0.5
 
-  def reward(self, s, a, ns): # required
+  def reward(self, s, a, ns):
     s = make3D(s, self.sdim)
     a = make3D(a, self.adim)
     ns = make3D(ns, self.sdim)
@@ -290,11 +306,21 @@ class FrozenLake(Environment):
 
   def disturb(self):
     (d, p) = normal_dist(self.S, self.dn, Sinv=self.Sinv)
-    return (d + self.mu.reshape(-1, 1), p)
+    return (d + self.mu.reshape((1, -1)), p)
 
-  def next_state(self, s, a): # required
+  def next_state(self, s, a):
     s = make3D(s, self.sdim)
     a = make3D(a, self.adim)
+
+    max_shape = np.max([s.shape, a.shape], axis=0)
+    s_shape = np.copy(max_shape)
+    s_shape[1] = self.sdim
+    a_shape = np.copy(max_shape)
+    a_shape[1] = self.adim
+
+    s = np.broadcast_to(s, s_shape)
+    a = np.broadcast_to(a, a_shape)
+
     h = 1e-1
     ns = rk4_fn(self.f, s, 0.0, self.dt, self.h, a)
     ns = np.clip(ns, self.smin, self.smax)
@@ -338,7 +364,7 @@ class DiscreteEnvironment(Environment):
   def next_state(self, s, a):
     s = make3D(s, self.sdim)
     sd = self._s2sd(s)
-    ns = env.next_state(sd, a)
+    ns = self.env.next_state(sd, a)
     ns = make3D(ns, self.sdim)
     nsd = self._s2sd(ns)
     return nsd
@@ -349,11 +375,14 @@ class DiscreteEnvironment(Environment):
     ns = make3D(ns, self.sdim)
     nsd = self._s2sd(ns)
     return self.env.reward(sd, a, nsd)
+
+  def disturb(self):
+    return self.env.disturb()
 ###############################################################################
 
 
 # Value Iteration #############################################################
-class PolicyIterationSolver:
+class Solver:
   def __init__(self, env, pol):
     self.env = env
     self.pol = pol
@@ -361,12 +390,14 @@ class PolicyIterationSolver:
   def iterate(self):
     raise NotImplementedError
 
-class TabularPolicyIterationSolver(PolicyIterationSolver):
-  def __init__(self, env, pol, sn, an):
+class TabularDiscreteSolver(Solver):
+  def __init__(self, env, pol, n):
     super().__init__(env, pol)
-    self.value_function = TabularValueFunction(env.smin, env.smax, sn)
-    self.env = DiscreteEnvironment(env, sn)
+    self.value_function = TabularValueFunction(env.smin, env.smax, n)
+    self.env = DiscreteEnvironment(env, n)
     self.all_s = self.env.all_states()
+    pol.set_env(self.env)
+    pol.set_value_function(self.value_function)
 
   def iterate(self):
     a = self.pol.choose_action(self.all_s)
