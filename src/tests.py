@@ -93,17 +93,24 @@ s = np.hstack([np.ones((n**2, 1)) for i in range(fl.sdim)])
 ns = make3D(ns, fl.sdim)
 s = make3D(s, fl.sdim)
 
-holes = -1 * fl._is_in_discrete(ns, fl.holes).reshape((n, n))
-goals = 1.0 * fl._is_in_discrete(ns, fl.goals).reshape((n, n))
+holes = -1 * is_in_discrete(ns[:, [0, 2]], fl.holes, fl.gridn, fl.smin[:, [0, 2]],
+    fl.smax[:, [0, 2]]).reshape((n, n))
+goals = 1 * is_in_discrete(ns[:, [0, 2]], fl.goals, fl.gridn, fl.smin[:, [0, 2]],
+    fl.smax[:, [0, 2]]).reshape((n, n))
 pl.figure(7)
 pl.imshow(holes + goals)
 
-# Solver Tests ################################################################
-n = 10
-pol = OptimalDiscretePolicy(fl.sdim, fl.amin, fl.amax, n)
-sol = TabularDiscreteSolver(fl, pol, 10)
-print(sol.iterate())
+mars = Mars()
 
+# Solver Tests ################################################################
+pol = OptimalDiscretePolicy(mars.sdim, mars.amin, mars.amax, 4)
+sol = TabularDiscreteSolver(mars, pol, 9)
+for i in range(200):
+  sol.iterate()
+all_s = sol.env.all_states()
+v = sol.value_function.value(all_s)
+pl.figure(17)
+pl.imshow(v.reshape((9, 9)))
 
 # RK4 test ####################################################################
 N = 50

@@ -10,8 +10,7 @@ def normal_dist(S, n=5, sig_span=3.0, **kwargs):
 
   dim = S.shape[0]
 
-  n = np.array(n)
-  n = np.repeat(n, dim) if n.size == 1 else n
+  n = np.repeat(n, dim) if np.size(n) == 1 else np.array(n)
   sig = np.sqrt(np.diag(S))
   rngs = [np.linspace(-sig_span * sig[i], sig_span * sig[i], n[i]) if n[i] > 1
       else np.array([0.0]) for i in range(dim)]
@@ -47,6 +46,20 @@ def match_03(*args):
       else np.copy(np.broadcast_to(arg, (max_shape[0], arg.shape[1],
         max_shape[2]))) for arg in args]
   return args
+
+def is_in_discrete(s, points, gridn, smin, smax):
+  sdim = np.size(smin)
+  assert sdim == np.size(smax)
+  s = make3D(s, sdim)
+  smin = make3D(smin, sdim)
+  smax = make3D(smax, sdim)
+  gridn = (make3D(gridn, sdim) if np.size(gridn) > 1 else
+      make3D(np.repeat(gridn, sdim), sdim))
+  sd = np.round((gridn - 1) * (s - smin) / (smax - smin))
+
+  mask = np.any(np.array([np.all(np.equal(sd, make3D(point, 2)), axis=1)
+    for point in points]), axis=0).reshape((s.shape[0], 1, s.shape[2]))
+  return mask
 ###############################################################################
 
 # POLICIES ####################################################################
@@ -138,7 +151,9 @@ class DiscretePolicy(Policy):
         make3D(np.repeat(int(n), self.adim), self.adim))
 
     alin = [np.linspace(self.amin.reshape(-1)[i], self.amax.reshape(-1)[i],
-      self.n.reshape(-1)[i]) for i in range(self.adim)]
+      self.n.reshape(-1)[i]) if self.n.reshape(-1)[i] > 1 else
+      np.array([(self.amin.reshape(-1)[i] + self.amax.reshape(-1)[i]) / 2.0])
+      for i in range(self.adim)]
     self.aspc = make3D(np.hstack([aarr.reshape((-1, 1)) for aarr in
       np.meshgrid(*alin)]), self.adim)
     self.aspcdim = self.aspc.shape[0]
@@ -203,22 +218,29 @@ class TabularValueFunction(ValueFunction):
 
   def qvalue(self, env, s, a):
     assert self.sdim == env.sdim
-    adim = np.shape(a)[1] if len(np.shape(a)) > 1 else np.shape(a)[0]
-    s = make3D(s, self.sdim)
-    a = make3D(a, adim)
+    s = make3D(s, env.sdim)
+    a = make3D(a, env.adim)
 
     (d, p) = env.disturb()
-    d = make3D(d, self.sdim + adim).transpose((2, 1, 0))
-    p = make3D(p, 1)
-    s = s + d[:, 0:env.sdim]
-    a = a + d[:, env.sdim:]
+    d = make3D(d, 2 * env.sdim + env.adim).transpose((2, 1, 0))
+    p = p.reshape((1, 1, -1))
+    
+    s = s + d[:, 0:env.sdim, :]
+    s = np.clip(s, env.smin, env.smax)
+
+    a = a + d[:, env.sdim:(env.sdim + env.adim), :]
+    a = np.clip(a, env.amin, env.amax)
 
     ns = env.next_state(s, a)
+    ns = ns + d[:, -env.sdim:, :]
+    ns = np.clip(ns, self.smin, self.smax)
+
     v = self.value(ns)
     r = env.reward(s, a, ns)
 
-    expected_v = make3D(np.sum(p * (r + env.gamma * v), axis=2), 1)
-
+    term_mask = env.is_terminal(s)
+    expected_v = make3D(np.sum(p * (1.0 - term_mask) * (r + env.gamma * v),
+      axis=2), 1)
     return expected_v
 
   def set_value(self, s, v):
@@ -238,11 +260,65 @@ class Environment:
   def __init__(self):
     pass
 
-  def next_state(self, a, ns):
+  def next_state(self, s, a):
     raise NotImplementedError
 
   def reward(self, s, a, ns):
     raise NotImplementedError
+
+class Mars(Environment):
+  def __init__(self):
+    self.sdim = 2
+    self.adim = 1
+    self.smin = make3D([0, 0], self.sdim)
+    self.smax = make3D([8, 8], self.sdim)
+    self.amin = make3D([0], self.adim)
+    self.amax = make3D([3], self.adim)
+
+    self.holes = np.array([[3, 3], [6, 6]])
+    self.goals = np.array([[8, 8]])
+    self.gridn = 9
+
+    self.gamma = 0.95
+
+  def reward(self, s, a, ns):
+    hole_mask = is_in_discrete(ns, self.holes, self.gridn, self.smin,
+        self.smax)
+    goal_mask = is_in_discrete(ns, self.goals, self.gridn, self.smin,
+        self.smax)
+    return (-100.0 * hole_mask + 5.0 * goal_mask) 
+
+  def next_state(self, s, a):
+    s = make3D(s, self.sdim)
+    a = make3D(a, self.adim)
+    (s, a) = match_03(s, a)
+    ns = np.copy(s)
+    a = np.clip(np.round(a), self.amin, self.amax)
+
+    dist = np.array([[1, 0], [0, 1], [-1, 0], [0, -1]])
+    aspc = np.array([0, 1, 2, 3])
+    for i in range(aspc.size):
+      (idx1, idx2) = np.where(np.all(a == aspc[i], axis=1))
+      ns[idx1, :, idx2] = s[idx1, :, idx2] + dist[i].reshape((1, 2))
+    ns = np.clip(ns, self.smin, self.smax)
+    return ns
+
+  def is_terminal(self, s):
+    s = make3D(s, self.sdim)
+    hole_mask = is_in_discrete(s, self.holes, self.gridn, self.smin,
+        self.smax)
+    goal_mask = is_in_discrete(s, self.goals, self.gridn, self.smin,
+        self.smax)
+    return np.logical_or(hole_mask, goal_mask)
+
+  def disturb(self):
+    d = make3D([[0, 0, 0, 0, 0],
+                [0, 0, 0, 1, 0],
+                [0, 0, 0, 0, 1],
+                [0, 0, 0, -1, 0],
+                [0, 0, 0, 0, -1]], 2 * self.sdim + self.adim)
+    p = np.array([0.6, 0.1, 0.1, 0.1, 0.1])
+    return (d, p)
 
 class FrozenLake(Environment):
   def __init__(self):
@@ -267,14 +343,11 @@ class FrozenLake(Environment):
     self.dt = 1e-1
 
     self.mu = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    self.S = np.array([[1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-                       [0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
-                       [0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
-                       [0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-                       [0.0, 0.0, 0.0, 0.0, 0.2, 0.0],
-                       [0.0, 0.0, 0.0, 0.0, 0.0, 0.2]])
+    self.S = np.eye(self.sdim + self.adim + self.sdim)
+    self.S[self.sdim + 0, self.sdim + 0] = 2
+    self.S[self.sdim + 1, self.sdim + 1] = 2
     self.Sinv = np.linalg.inv(self.S)
-    self.dn = np.array([1, 1, 1, 1, 5, 5])
+    self.dn = np.array([1, 1, 1, 1, 5, 5, 1, 1, 1, 1])
 
     self.gamma = 0.5
 
@@ -283,25 +356,21 @@ class FrozenLake(Environment):
     a = make3D(a, self.adim)
     ns = make3D(ns, self.sdim)
     term_mask = self.is_terminal(s)
-    hole_mask = self._is_in_discrete(ns, self.holes)
-    goal_mask = self._is_in_discrete(ns, self.goals)
+
+    pos = make3D(s[:, [0, 2]], 2)
+    hole_mask = is_in_discrete(pos, self.holes, self.gridn, self.smin,
+      self.smax)
+    goal_mask = is_in_discrete(pos, self.goals, self.gridn, self.smin,
+      self.smax)
     return (1.0 - term_mask) * (-1.0 * hole_mask + 1.0 * goal_mask)
-
-  def _is_in_discrete(self, s, points):
-    pos_min = self.smin[:, [0, 2]]
-    pos_max = self.smax[:, [0, 2]]
-    pos = s[:, [0, 2]]
-    gridn = make3D([self.gridn, self.gridn], 2)
-    posd = np.round((gridn - 1) * (pos - pos_min) / (pos_max - pos_min))
-
-    mask = np.any(np.array([np.all(np.equal(posd, make3D(point, 2)), axis=1)
-      for point in points]), axis=0).reshape((pos.shape[0], 1, pos.shape[2]))
-    return mask
 
   def is_terminal(self, s):
     s = make3D(s, self.sdim)
-    hole_mask = self._is_in_discrete(s, self.holes)
-    goal_mask = self._is_in_discrete(s, self.goals)
+    pos = make3D(s[:, [0, 2]], 2)
+    hole_mask = is_in_discrete(pos, self.holes, self.gridn, self.smin,
+        self.smax)
+    goal_mask = is_in_discrete(pos, self.goals, self.gridn, self.smin,
+        self.smax)
     return np.logical_or(goal_mask, hole_mask)
 
   def disturb(self):
@@ -312,14 +381,10 @@ class FrozenLake(Environment):
     s = make3D(s, self.sdim)
     a = make3D(a, self.adim)
 
-    max_shape = np.max([s.shape, a.shape], axis=0)
-    s_shape = np.copy(max_shape)
-    s_shape[1] = self.sdim
-    a_shape = np.copy(max_shape)
-    a_shape[1] = self.adim
+    s = np.clip(s, self.smin, self.smax)
+    a = np.clip(a, self.amin, self.amax)
 
-    s = np.broadcast_to(s, s_shape)
-    a = np.broadcast_to(a, a_shape)
+    (s, a) = match_03(s, a)
 
     h = 1e-1
     ns = rk4_fn(self.f, s, 0.0, self.dt, self.h, a)
@@ -349,13 +414,13 @@ class DiscreteEnvironment(Environment):
 
   def _s2sd(self, s):
     s = (np.round((self.n - 1) * (s - self.smin) / (self.smax - self.smin)) /
-        (self.n - 1))
+        (self.n - 1) * (self.smax - self.smin))
     return s
 
   def all_states(self):
     slin = [np.linspace(self.smin.reshape(-1)[i], self.smax.reshape(-1)[i],
       self.n.reshape(-1)[i]) if self.n.reshape(-1)[i] > 1 else
-      np.array([(self.smin.reshape(-1)[i] + self.smax.reshape(-1)[i]) / 2]) for
+      np.array([(self.smin.reshape(-1)[i] + self.smax.reshape(-1)[i]) / 2.0]) for
       i in range(self.sdim)]
     sspc = np.hstack([sarr.reshape((-1, 1)) for sarr in np.meshgrid(*slin)])
     sspc = make3D(sspc, self.sdim)
@@ -375,6 +440,11 @@ class DiscreteEnvironment(Environment):
     ns = make3D(ns, self.sdim)
     nsd = self._s2sd(ns)
     return self.env.reward(sd, a, nsd)
+
+  def is_terminal(self, s):
+    s = make3D(s, self.sdim)
+    sd = self._s2sd(s)
+    return self.env.is_terminal(sd)
 
   def disturb(self):
     return self.env.disturb()
@@ -401,8 +471,9 @@ class TabularDiscreteSolver(Solver):
 
   def iterate(self):
     a = self.pol.choose_action(self.all_s)
-    expected_v = self.value_function.qvalue(self.env, self._all_s, a)
-    dv = self.value_function.set_value(all_s, expected_v)
+    expected_v = self.value_function.qvalue(self.env, self.all_s, a)
+    dv = self.value_function.set_value(self.all_s, expected_v)
+    print(dv)
 
     return dv
 ###############################################################################
