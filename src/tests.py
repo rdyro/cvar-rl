@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as pl
 from mpl_toolkits.mplot3d import Axes3D
 import sys
+from scipy.interpolate import griddata
 
 
 # Policy Tests ################################################################
@@ -105,13 +106,48 @@ mars = Mars()
 # Solver Tests ################################################################
 pol = OptimalDiscretePolicy(mars.sdim, mars.amin, mars.amax, 4)
 sol = TabularDiscreteSolver(mars, pol, 9)
-for i in range(200):
+for i in range(100):
   sol.iterate()
 all_s = sol.env.all_states()
-v = sol.value_function.value(all_s)
-pl.figure(17)
-pl.imshow(v.reshape((9, 9)))
+val = sol.value_function.value(all_s)
+all_a = sol.pol.choose_action(all_s)
 
+for i in range(all_a.shape[0]):
+  print("[%d, %d] -> %d" % (all_s[i, 0, 0], all_s[i, 1, 0], all_a[i, 0, 0]))
+
+(ns, p) = sol.env.next_state_full(all_s, all_a)
+(all_s_exp, all_a_exp, ns) = match_03(all_s, all_a, ns)
+r = np.sum(p * sol.env.reward(all_s_exp, all_a_exp, ns), axis=2)
+
+idxs = sol.value_function._sidx(make3D([2, 3], 2)).reshape(-1)[0]
+print(ns[idxs, :, :])
+print(ns[idxs, :, :].transpose((1, 0)))
+
+uv_list = []
+for a in all_a:
+  a_arr = None
+  if a == 0:
+    a_arr = [1, 0]
+  elif a == 1:
+    a_arr = [0, 1]
+  elif a == 2:
+    a_arr = [-1, 0]
+  elif a == 3:
+    a_arr = [0, -1]
+  uv_list.append(a_arr)
+#uv = np.array([[1, 0] if a == 0 else [0, 1] if a == 1 else [-1, 0] if a == 2 else [0, -1] for a in all_a])
+
+print(sol.pol.choose_action(make3D([4, 8], 2)))
+
+uv = np.array(uv_list)
+u = uv[:, 0]
+v = uv[:, 1]
+pl.figure(17)
+pl.imshow(val.reshape((9, 9)), origin="lower")
+pl.colorbar()
+pl.quiver(all_s[:, 0].reshape((9, 9)), all_s[:, 1].reshape((9, 9)), 
+          u.reshape((9, 9)), v.reshape((9, 9)))
+print(TabularValueFunction(mars.smin, mars.smax, 9).qvalue(mars, [2, 3], 2))
 # RK4 test ####################################################################
 N = 50
 K = 20
@@ -136,6 +172,5 @@ pl.clf()
 for i in range(N):
   r = np.random.randint(K)
   pl.plot(t, X[i, 0, r, :].reshape(-1))
-
 
 pl.show()
