@@ -1,3 +1,6 @@
+from __future__ import division
+from __future__ import print_function
+
 def pred_op(in_, layerN, scope, out_nb):
   with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
     nn_ = in_
