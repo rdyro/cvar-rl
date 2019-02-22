@@ -59,7 +59,8 @@ class NNModel:
   def __init__(self, in_nb, out_nb, layerN, scope=None, h=1e-2, clip_norm=10):
     self.in_nb = in_nb
     self.out_nb = out_nb
-    self.scope = scope if scope != None else str(np.iinfo(np.int64).max)
+    self.scope = (scope if scope != None else
+        str(np.random.randint(np.iinfo(np.int64).max)))
     self.x_ = tf.placeholder(shape=(None, in_nb), dtype=tf.float32)
     self.y_ = tf.placeholder(shape=(None, out_nb), dtype=tf.float32)
     self.kp_ = tf.placeholder(dtype=tf.float32)
@@ -92,7 +93,7 @@ class NNModel:
       times -= 1
 
   def _batch_idx(self, n, N):
-    n = int(np.ceil(n))
+    n = max(int(np.ceil(n)), 100)
     N = int(np.ceil(N))
     return np.random.randint(N, size=n) if n <= N else np.arange(n)
 

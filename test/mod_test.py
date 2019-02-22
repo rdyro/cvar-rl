@@ -7,10 +7,11 @@ from tf_util import *
 import mod
 
 import matplotlib.pyplot as pl
+from mpl_toolkits.mplot3d import Axes3D
 import time
 
 # RK4 test ####################################################################
-N = int(1e5)
+N = int(1e3)
 x = np.linspace(-5, 10, N)
 sig = 1e-1
 mu = 0.0
@@ -24,7 +25,7 @@ kp_ = tf.placeholder(dtype=tf.float32)
 
 model = mod.NNModel(1, 1, np.repeat(32, 4))
 sess = tf.Session()
-model.set_sess(tf.Session())
+model.set_sess(sess)
 t1 = time.time()
 model.train(x.reshape((-1, 1)), y.reshape((-1, 1)))
 t2 = time.time()
@@ -38,8 +39,43 @@ t2 = time.time()
 print(t2 - t1)
 pl.plot(x, model2.predict(x.reshape((-1, 1))).reshape(-1))
 
+
+
+X, Y = np.meshgrid(*[np.linspace(-2, 2, 100) for i in range(2)])
+Z = np.cos(X + 2.0 * Y)
+
+model_nn = mod.NNModel(2, 1, np.repeat(32, 4))
+model_nn.set_sess(sess)
+model_nn.train(np.hstack([X.reshape((-1, 1)), Y.reshape((-1, 1))]),
+    Z.reshape((-1, 1)))
+
+model_pl = mod.PolyLSModel(2, 5, mix=True)
+model_pl.train(np.hstack([X.reshape((-1, 1)), Y.reshape((-1, 1))]),
+    Z.reshape((-1, 1)))
+
+Znn = model_nn.predict(np.hstack([X.reshape((-1, 1)), Y.reshape((-1,
+  1))])).reshape((100, 100))
+
+Zpl = model_pl.predict(np.hstack([X.reshape((-1, 1)), Y.reshape((-1,
+  1))])).reshape((100, 100))
+
+
+fig = pl.figure()
+ax = fig.gca(projection="3d")
+ax.plot_surface(X, Y, Z)
+
+fig = pl.figure()
+ax = fig.gca(projection="3d")
+ax.plot_surface(X, Y, Znn)
+
+fig = pl.figure()
+ax = fig.gca(projection="3d")
+ax.plot_surface(X, Y, Zpl)
+
 pl.show()
 
+
+sess.close()
 
 """
 windowN = 50
