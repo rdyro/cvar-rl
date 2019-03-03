@@ -2,8 +2,10 @@ from __future__ import division
 from __future__ import print_function
 
 from util import *
+from tf_util import *
 
 # POLICIES ####################################################################
+# general
 class Policy:
   def __init__(self, sdim, adim):
     self.sdim = sdim
@@ -82,6 +84,7 @@ class MultNormRandPolicy(Policy):
     return super().choose_action_discrete(s, n, self.mu - self.bound *
         np.diag(self.S), self.mu + self.bound * np.diag(self.S))
 
+# tabular
 class DiscretePolicy(Policy):
   def __init__(self, sdim, amin, amax, n):
     super().__init__(sdim, np.size(amin))
@@ -121,4 +124,121 @@ class OptimalDiscretePolicy(DiscretePolicy):
 
   def choose_action_discrete(self, s, n):
     return super().choose_action_discrete(s, n, self.amin, self.amax)
+
+# policy gradient
+class GaussianPolicy(Policy):
+  def __init__(self, sdim, adim, amin, amax, n, scope=None, **kwargs):
+    super().__init__(sdim, adim)
+    self.scope = (scope if scope != None else
+        str(np.random.randint(np.iinfo(np.int64).max)))
+    kwargs = dict({"h": 1e-2, "layerN": np.repeat(32, 3)}, **kwargs)
+
+    self.scope = (scope if scope != None else
+        str(np.random.randint(np.iinfo(np.int64).max)))
+    # placeholders
+    self.adv_ = tf.placeholder(tf.float32, shape=(None,))
+    self.s_ = tf.placeholder(tf.float32, shape=(None, self.sdim))
+    self.a_ = tf.placeholder(tf.float32, shape=(None, self.adim))
+    # variables
+    self.a_mu_ = pred_op(self.s_, kwargs["layerN"], self.scope, self.adim)
+    with tf.variable_scope(scope):
+      self.a_logstd_ = tf.get_variable("log_std", dtype=tf.float32, shape=(1,
+        self.adim))
+    # operations
+    self.a_sample_ = (self.a_mu_ + tf.exp(self.a_logstd_) *
+        tf.random_normal(tf.shape(self.a_mu_)))
+    self.logprob_ = tf.log(self._prob_(self.a_sample_, self.a_mu_,
+      tf.exp(self.a_logstd_)))
+    self.loss_ = -tf.reduce_mean(self.logprob_ * self.adv_)
+    self.train_ = (tf.train.AdamOptimizer(
+      learning_rate=kwargs["h"]).minimize(self.loss_))
+
+    self.sess = None
+
+  def _prob_(self, x_, mu_, std_):
+    return ((2 * np.pi * tf.reduce_prod(std_))**(-0.5) * 
+        tf.exp(-0.5 * np.reduce_mean(x_**2 / std_, axis=1)))
+
+  def set_session(self, sess):
+    self.sess = sess
+
+  def train(self, s, a, adv, times=-1, batch_frac=0.01):
+    assert self.sess != None
+
+    (s, a, adv) = match_03(s, a, adv)
+    (s, _) = unstack2D(s)
+    (a, _) = unstack2D(a)
+    (adv, _) = unstack2D(adv)
+    train_till_convergence_or_for(self.sess, self.loss_, self.train_,
+        [self.s_, self.a_, self.adv_], [s, a, adv], times=times)
+
+  def choose_action(self, s):
+    assert self.sess != None
+    (s, layer_nb) = unstack2D(s)
+    return stack2D(self.sess.run(self.a_sample_, feed_dict={self.s_: s}),
+        layer_nb)
+
+  def choose_action_discrete(self, s, n, amin, amax):
+    raise NotImplementedError
+
+class SoftmaxPolicy(Policy):
+  def __init__(self, sdim, adim, amin, amax, n, scope=None, **kwargs):
+    super().__init__(sdim, adim)
+    assert np.size(self.amin) == self.adim
+    assert np.size(self.amax) == self.adim
+    self.amin = make3D(amin, self.adim)
+    self.amax = make3D(amax, self.adim)
+    self.n = (make3D(n, self.adim).astype(int) if np.size(n) > 1 else
+        make3D(np.repeat(int(n), self.adim), self.adim))
+    self.adim_lin = np.prod(self.n)
+
+    self.scope = (scope if scope != None else
+        str(np.random.randint(np.iinfo(np.int64).max)))
+    kwargs = dict({"h": 1e-2, "layerN": np.repeat(32, 3)}, **kwargs)
+
+    self.scope = (scope if scope != None else
+        str(np.random.randint(np.iinfo(np.int64).max)))
+    # placeholders
+    self.adv_ = tf.placeholder(tf.float32, shape=(None,))
+    self.s_ = tf.placeholder(tf.float32, shape=(None, self.sdim))
+    self.a_ = tf.placeholder(tf.float32, shape=(None, self.adim))
+    # variables
+    self.a_lin_logit_ = pred_op(self.s_, kwargs["layerN"], self.scope,
+        self.adim_lin)
+    # operations
+    self.a_sample_ = tf.squeeze(tf.multinomial(self.a_lin_logit_, 1), axis=1)
+    self.logprob_ = -tf.nn.sparse_softmax_cross_entropy_with_logits(
+        labels=self.a_, logits=self.a_lin_logit_)
+    self.loss_ = -tf.reduce_mean(self.logprob_ * self.adv_)
+    self.train_ = (tf.train.AdamOptimizer(
+      learning_rate=kwargs["h"]).minimize(self.loss_))
+
+    self.sess = None
+
+  def _prob_(self, x_, mu_, std_):
+    return ((2 * np.pi * tf.reduce_prod(std_))**(-0.5) * 
+        tf.exp(-0.5 * np.reduce_mean(x_**2 / std_, axis=1)))
+
+  def set_session(self, sess):
+    self.sess = sess
+
+  def train(self, s, a, adv, times=-1, batch_frac=0.01):
+    assert self.sess != None
+
+    (s, a, adv) = match_03(s, a, adv)
+    (s, _) = unstack2D(s)
+    (a, _) = unstack2D(a)
+    (adv, _) = unstack2D(adv)
+    train_till_convergence_or_for(self.sess, self.loss_, self.train_,
+        [self.s_, self.a_, self.adv_], [s, a, adv], times=times)
+
+  def choose_action(self, s):
+    assert self.sess != None
+    (s, layer_nb) = unstack2D(s)
+    a_lin = self.sess.run(self.a_sample_, feed_dict={self.s_: s})
+    a = np.vstack(np.ravel_index(a_lin, self.n)).T
+    return stack2D(a, layer_nb)
+
+  def choose_action_discrete(self, s, n, amin, amax):
+    raise NotImplementedError
 ###############################################################################
