@@ -25,14 +25,15 @@ kp_ = tf.placeholder(dtype=tf.float32)
 
 model = mod.NNModel(1, 1, np.repeat(32, 4))
 sess = tf.Session()
-model.set_sess(sess)
+sess.run(tf.global_variables_initializer())
+model.set_session(sess)
 t1 = time.time()
 model.train(x.reshape((-1, 1)), y.reshape((-1, 1)))
 t2 = time.time()
 print(t2 - t1)
 pl.plot(x, model.predict(x.reshape((-1, 1))).reshape(-1))
 
-model2 = mod.PolyLSModel(1, 11)
+model2 = mod.PolyLSModel(1, 1, 11)
 t1 = time.time()
 model2.train(x.reshape((-1, 1)), y.reshape((-1, 1)))
 t2 = time.time()
@@ -45,11 +46,12 @@ X, Y = np.meshgrid(*[np.linspace(-2, 2, 100) for i in range(2)])
 Z = np.cos(X + 2.0 * Y)
 
 model_nn = mod.NNModel(2, 1, np.repeat(32, 4))
-model_nn.set_sess(sess)
+model_nn.set_session(sess)
+sess.run(tf.global_variables_initializer())
 model_nn.train(np.hstack([X.reshape((-1, 1)), Y.reshape((-1, 1))]),
     Z.reshape((-1, 1)))
 
-model_pl = mod.PolyLSModel(2, 5, mix=True)
+model_pl = mod.PolyLSModel(2, 1, 5, mix=True)
 model_pl.train(np.hstack([X.reshape((-1, 1)), Y.reshape((-1, 1))]),
     Z.reshape((-1, 1)))
 

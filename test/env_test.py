@@ -32,4 +32,7 @@ pl.imshow(holes + goals)
 
 mars = env.Mars()
 
+print(mars.sample_states(5).shape)
+print(mars.sample_states(5).reshape(-1, 2))
+
 pl.show()

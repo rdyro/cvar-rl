@@ -127,10 +127,9 @@ class OptimalDiscretePolicy(DiscretePolicy):
 
 # policy gradient
 class GaussianPolicy(Policy):
-  def __init__(self, sdim, adim, amin, amax, n, scope=None, **kwargs):
+  def __init__(self, sdim, adim, amin, amax, n, **kwargs):
     super().__init__(sdim, adim)
-    self.scope = (scope if scope != None else
-        str(np.random.randint(np.iinfo(np.int64).max)))
+    self.scope = random_scope()
     kwargs = dict({"h": 1e-2, "layerN": np.repeat(32, 3)}, **kwargs)
 
     self.scope = (scope if scope != None else
@@ -182,36 +181,36 @@ class GaussianPolicy(Policy):
     raise NotImplementedError
 
 class SoftmaxPolicy(Policy):
-  def __init__(self, sdim, adim, amin, amax, n, scope=None, **kwargs):
+  def __init__(self, sdim, adim, amin, amax, an, **kwargs):
     super().__init__(sdim, adim)
+    self.amin = amin
+    self.amax = amax
     assert np.size(self.amin) == self.adim
     assert np.size(self.amax) == self.adim
     self.amin = make3D(amin, self.adim)
     self.amax = make3D(amax, self.adim)
-    self.n = (make3D(n, self.adim).astype(int) if np.size(n) > 1 else
-        make3D(np.repeat(int(n), self.adim), self.adim))
-    self.adim_lin = np.prod(self.n)
+    self.an = (make3D(an, self.adim).astype(int) if np.size(an) > 1 else
+        make3D(np.repeat(int(an), self.adim), self.adim))
+    self.adim_lin = np.prod(self.an)
 
-    self.scope = (scope if scope != None else
-        str(np.random.randint(np.iinfo(np.int64).max)))
-    kwargs = dict({"h": 1e-2, "layerN": np.repeat(32, 3)}, **kwargs)
+    self.scope = random_scope()
+    self.params = dict({"h": 1e-2, "layerN": np.repeat(32, 3)}, **kwargs)
 
-    self.scope = (scope if scope != None else
-        str(np.random.randint(np.iinfo(np.int64).max)))
     # placeholders
     self.adv_ = tf.placeholder(tf.float32, shape=(None,))
     self.s_ = tf.placeholder(tf.float32, shape=(None, self.sdim))
-    self.a_ = tf.placeholder(tf.float32, shape=(None, self.adim))
+    self.a_lin_ = tf.placeholder(tf.int32, shape=(None,))
     # variables
-    self.a_lin_logit_ = pred_op(self.s_, kwargs["layerN"], self.scope,
+    self.a_lin_logit_ = pred_op(self.s_, self.params["layerN"], self.scope,
         self.adim_lin)
     # operations
-    self.a_sample_ = tf.squeeze(tf.multinomial(self.a_lin_logit_, 1), axis=1)
+    self.a_lin_sample_ = tf.squeeze(tf.multinomial(self.a_lin_logit_, 1),
+        axis=1)
     self.logprob_ = -tf.nn.sparse_softmax_cross_entropy_with_logits(
-        labels=self.a_, logits=self.a_lin_logit_)
+        labels=self.a_lin_, logits=self.a_lin_logit_)
     self.loss_ = -tf.reduce_mean(self.logprob_ * self.adv_)
     self.train_ = (tf.train.AdamOptimizer(
-      learning_rate=kwargs["h"]).minimize(self.loss_))
+      learning_rate=self.params["h"]).minimize(self.loss_))
 
     self.sess = None
 
@@ -229,14 +228,18 @@ class SoftmaxPolicy(Policy):
     (s, _) = unstack2D(s)
     (a, _) = unstack2D(a)
     (adv, _) = unstack2D(adv)
+
+    a_lin = np.ravel_multi_index(np.round(a).astype(int).T,
+        self.an.reshape(-1))
+    adv = adv.reshape(-1)
     train_till_convergence_or_for(self.sess, self.loss_, self.train_,
-        [self.s_, self.a_, self.adv_], [s, a, adv], times=times)
+        [self.s_, self.a_lin_, self.adv_], [s, a_lin, adv], times=times)
 
   def choose_action(self, s):
     assert self.sess != None
     (s, layer_nb) = unstack2D(s)
-    a_lin = self.sess.run(self.a_sample_, feed_dict={self.s_: s})
-    a = np.vstack(np.ravel_index(a_lin, self.n)).T
+    a_lin = self.sess.run(self.a_lin_sample_, feed_dict={self.s_: s})
+    a = np.vstack(np.unravel_index(a_lin, self.an.reshape(-1))).T
     return stack2D(a, layer_nb)
 
   def choose_action_discrete(self, s, n, amin, amax):

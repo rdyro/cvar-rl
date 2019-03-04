@@ -31,4 +31,32 @@ zz = griddata((d[:, 0], d[:, 1]), p, (xx, yy), method="linear")
 fig = pl.figure()
 ax = fig.gca(projection="3d")
 ax.plot_surface(xx, yy, zz)
+
+# test is_in_discrete
+print("Testing is_in_discrete")
+points = np.array([[0, 0], [3, 3]])
+smin = [0.0, 0.0]
+smax = [1.0, 1.0]
+
+N = 10
+X, Y = np.meshgrid(np.linspace(smin[0], smax[0], N), np.linspace(smin[1],
+  smax[1], N))
+
+s1 = np.hstack([X.reshape((-1, 1)), Y.reshape((-1, 1))])
+s2 = np.copy(s1)
+s2[:, :] = 0.0
+s3 = np.copy(s1)
+s3[:, :] = 0.5
+
+s = np.dstack([s1, s2, s3])
+mask = is_in_discrete(s, points, 4, smin, smax)
+print("mask = ")
+print(mask)
+print(mask.shape)
+
+for i in range(s.shape[2]):
+  pl.figure(16 - i)
+  pl.imshow(mask[:, :, i].reshape((N, N)))
+  print(mask[:, :, i].reshape((N, N)))
+
 pl.show()

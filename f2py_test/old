@@ -1,0 +1,2 @@
+cf2py   real(8), dimension(n), intent(out), depend(a) :: b=as_column_major_storage(a)
+cf2py   integer, intent(hide),depend(a) :: n=size(a)

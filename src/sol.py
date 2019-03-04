@@ -6,6 +6,7 @@ from tf_util import *
 import val
 import env
 import mod
+import pol
 
 # Solver ######################################################################
 class Solver:
@@ -64,19 +65,23 @@ class ModelDiscreteSolver(Solver):
  
 class PolicyGradientDiscreteSolver(Solver):
   def __init__(self, environment, n, **kwargs):
-    self.params = dict({"episodes_nb": 500, "episode_len": 20, "baseline":
-      False}, **kwargs)
+    self.params = dict({"episodes_nb": 5000, "episode_len": 200, "baseline":
+      False, "normalize_adv": False, "h": 1e-2}, **kwargs)
     policy = pol.SoftmaxPolicy(environment.sdim, environment.adim,
         environment.amin, environment.amax, n)
     self.sess = tf.Session()
     policy.set_session(self.sess)
     self.sess.run(tf.global_variables_initializer())
-    super().__init(environment, policy)
+    super().__init__(environment, policy)
 
+    self.s_ = tf.placeholder(tf.float32, shape=(None, self.environment.sdim))
     
     if self.params["baseline"] == True:
-      self.s_ = tf.placeholder(tf.float32, shape=(None, self.environment.sdim))
-      self.baseline_ = 
+      self.b_scope = random_scope()
+      self.b_ = pred_op(self.s_, self.b_scope, 1)
+      self.b_target_ = tf.placeholder(tf.float32, shape=(None, 1))
+      self.b_loss_ = loss_op(self.b_target_, self.b_)
+      self.b_train_ = optimizer_op(self.b_loss_, self.params["h"])
 
   def _episodes(self):
     N = self.params["episodes_nb"]
@@ -87,7 +92,7 @@ class PolicyGradientDiscreteSolver(Solver):
       cs = s[:, :, -1]
 
       na = self.policy.choose_action(cs)
-      ns = self.environment.next_state_sample(cs, na)
+      (ns, p) = self.environment.next_state_sample(cs, na)
       nr = self.environment.reward(cs, na, ns)
 
       a = np.dstack([a, na])
@@ -98,13 +103,23 @@ class PolicyGradientDiscreteSolver(Solver):
     return (s, a, r)
 
   def _mc_gt(self, r):
-    gamma = np.power(self.environment.gamma, 
-        np.arange(r.shape[1]).reshape((1, -1, 1)))
-    gt = np.cumsum((r * gamma)[::-1])[::-1] / gamma
+    gamma = self.environment.gamma**np.arange(r.shape[2]).reshape((1, 1, -1))
+    gt = np.cumsum((r * gamma)[:, :, ::-1], axis=2)[:, :, ::-1] / gamma
     return gt
 
   def iterate(self):
     (s, a, r) = self._episodes()
     gt = self._mc_gt(r)
-
+    adv = gt
+    if self.params["baseline"] == True:
+      (s, layer_nb) = unstack2D(s)
+      b = self.sess.run(self.b_, feed_dict={self.s_: s})
+      b = stack2D(b, layer_nb)
+      s = stack2D(s, layer_nb)
+      adv = adv - b
+    if self.params["normalize_adv"] == True:
+      adv -= np.mean(adv)
+      adv /= np.std(adv)
+    self.policy.train(s, a, adv, 1)
+    return np.mean(gt)
 ###############################################################################,

@@ -58,13 +58,12 @@ class PolyLSModel(LSModel):
     return np.dot(A, self.th)
 
 class NNModel:
-  def __init__(self, in_nb, out_nb, layerN, scope=None, **kwargs):
+  def __init__(self, in_nb, out_nb, layerN, **kwargs):
     self.params = dict({"h": 1e-2}, **kwargs)
 
     self.in_nb = in_nb
     self.out_nb = out_nb
-    self.scope = (scope if scope != None else
-        str(np.random.randint(np.iinfo(np.int64).max)))
+    self.scope = random_scope()
     self.x_ = tf.placeholder(shape=(None, in_nb), dtype=tf.float32)
     self.y_ = tf.placeholder(shape=(None, out_nb), dtype=tf.float32)
     self.kp_ = tf.placeholder(dtype=tf.float32)

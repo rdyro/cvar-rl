@@ -3,6 +3,9 @@ from __future__ import print_function
 import tensorflow as tf
 import numpy as np
 
+def random_scope():
+  return str(np.random.randint(np.iinfo(np.int64).max))
+
 def pred_op(in_, layerN, scope, out_nb, keep_prob=None):
   with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
     nn_ = in_
@@ -73,7 +76,7 @@ def train_till_convergence_or_for(sess, loss_, train_, plhs, vals,
   assert len(plhs) == len(vals)
   kwargs = dict({"winN": 50, "min_nb": 100, "times": -1, "batch_frac": 0.01},
       **kwargs)
-  is_data = np.repeat(is_data, len(phls)) if np.size(is_data) == 1 else is_data
+  is_data = np.repeat(is_data, len(plhs)) if np.size(is_data) == 1 else is_data
 
   winN = kwargs["winN"]
   times = kwargs["times"]
@@ -83,8 +86,19 @@ def train_till_convergence_or_for(sess, loss_, train_, plhs, vals,
 
   while i < winN or np.mean(lh[0:(winN // 2)] - lh[(winN // 2):]) >= 0.0:
     idx = batch_idx(kwargs["batch_frac"] * N, N, kwargs["min_nb"])
-    feed_dict = dict(zip(plhs, [vals[i][idx, :] if is_data[i] else vals[i] for
-      i in range(len(vals))]))
+    feed_dict = {}
+    for i in range(len(vals)):
+      if is_data[i]:
+        if len(np.shape(vals[i])) == 1:
+          feed_dict[plhs[i]] = vals[i][idx]
+        elif len(np.shape(vals[i])) == 2:
+          feed_dict[plhs[i]] = vals[i][idx, :]
+        else:
+          raise NotImplementedError
+      else:
+        feed_dict[phls[i]] = vals[i]
+    #feed_dict = dict(zip(plhs, [vals[i][idx, :] if is_data[i] else vals[i] for
+    #i in range(len(vals))]))
     (loss, _) = sess.run([loss_, train_], feed_dict=feed_dict)
     lh[0:-1] = lh[1:]
     lh[-1] = loss
