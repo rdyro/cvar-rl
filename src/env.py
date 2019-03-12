@@ -2,7 +2,10 @@ from __future__ import division
 from __future__ import print_function
 
 from util import *
-import fortran
+import gym
+from copy import deepcopy
+from copy import copy
+#import fortran
 
 # Environments ################################################################
 class Environment:
@@ -24,6 +27,119 @@ class Environment:
   def sample_states(self, N):
     return (np.random.rand(N, self.smin.shape[1], 1) * (self.smax - self.smin)
         + self.smin)
+
+class GymWrapper(Environment):
+  def __init__(self, env_name):
+    self.gym_env = gym.make(env_name).env
+    self.gym_env.reset()
+
+    self.gamma = 0.95
+
+    self.is_adiscrete = isinstance(self.gym_env.action_space,
+        gym.spaces.Discrete)
+    if self.is_adiscrete:
+      self.adim = 1
+      self.amin = make3D([0], self.adim)
+      self.amax = make3D([self.gym_env.action_space.n - 1], self.adim)
+    else:
+      self.adim = np.size(self.gym_env.action_space.low)
+      self.amin = make3D(self.gym_env.action_space.low, self.adim)
+      self.amax = make3D(self.gym_env.action_space.high, self.adim)
+
+    self.is_sdiscrete = isinstance(self.gym_env.observation_space,
+        gym.spaces.Discrete)
+    if self.is_sdiscrete:
+      self.sdim = 1
+      self.smin = make3D([0], self.sdim)
+      self.smax = make3D([self.gym_env.observation_space.n], self.sdim)
+    else:
+      self.sdim = np.size(self.gym_env.observation_space.low)
+      self.smin = make3D(self.gym_env.observation_space.low, self.sdim)
+      self.smax = make3D(self.gym_env.observation_space.high, self.sdim)
+
+  def next_state_sample(self, s, a):
+    s = make3D(s, self.sdim)
+    a = make3D(a, self.adim)
+    (s, a) = match_03(s, a)
+
+    assert s.shape[2] == 1
+    assert a.shape[2] == 1
+
+    s_list = [tuple(s[i, :, :].reshape(-1)) for i in range(s.shape[0])]
+    a_list = [tuple(a[i, :, :].reshape(-1)) for i in range(s.shape[0])]
+
+    envs = [copy(self.gym_env) for i in range(s.shape[0])]
+    for i in range(s.shape[0]):
+      envs[i].state = s[i, :, :]
+
+    if self.is_adiscrete:
+      (ns_list, r_list, done_list, _) = zip(*[
+          envs[i].step(int(round(a_list[i][0]))) for i in range(s.shape[0])])
+    else:
+      (ns_list, r_list, done_list, _) = zip(*[
+          envs[i].step(a_list[i]) for i in range(s.shape[0])])
+
+    ns = np.vstack([ns.reshape((1, -1)) for ns in ns_list])
+    ns_list = [tuple(ns.reshape(-1)) for ns in ns_list]
+
+    # overwriting cached rewards
+    self.r_dict = dict(zip(zip(s_list, a_list, ns_list), r_list))
+    # overwriting cached done
+    self.done_dict = dict(zip(ns_list, done_list))
+
+    return (make3D(ns, self.sdim), make3D(np.repeat(1.0, ns.shape[0]), 1))
+
+  def sample_states(self, N, init=False):
+    #if init:
+    envs = [copy(self.gym_env) for i in range(N)]
+    [envs[i].reset() for i in range(N)]
+    s = make3D(np.vstack([envs[i].state.reshape((1, -1)) for i in range(N)]), 
+        self.sdim)
+    #else:
+    #s = np.random.randn(N, 1, self.adim)
+    #s = s * (self.smax - self.smin) + self.smin
+    return s
+
+  def reward(self, s, a, ns):
+    # this only works when called immediately after next_state_sample
+    s = make3D(s, self.sdim)
+    a = make3D(a, self.adim)
+    ns = make3D(ns, self.sdim)
+    (s, a, ns) = match_03(s, a, ns)
+    (s, layer_nb) = unstack2D(s)
+    (a, _) = unstack2D(a)
+    (ns, _) = unstack2D(ns)
+    s_list = [tuple(s[i, :].reshape(-1)) for i in range(s.shape[0])]
+    a_list = [tuple(a[i, :].reshape(-1)) for i in range(s.shape[0])]
+    ns_list = [tuple(ns[i, :].reshape(-1)) for i in range(s.shape[0])]
+    
+    r_list = [self.r_dict[key] for key in zip(s_list, a_list, ns_list)]
+    done_list = [self.done_dict[key] for key in ns_list]
+
+    r = make3D(np.array(r_list), 1)
+    done = make3D(np.array(done_list), 1)
+    return stack2D(r, layer_nb)
+
+  def is_terminal(self, s):
+    # this only works when called immediately after next_state_sample
+    s = make3D(s, self.sdim)
+    (s, layer_nb) = unstack2D(s)
+
+    s_list = [tuple(s[i, :].reshape(-1)) for i in range(s.shape[0])]
+
+    done_list = [self.done_dict[key] for key in s_list]
+
+    done = make3D(np.array(done_list), 1)
+    return stack2D(done, layer_nb)
+
+  def render(self, s):
+    s = make3D(s, self.sdim)
+    assert s.size == self.sdim
+    old_s = self.gym_env.state
+    self.gym_env.state = s.reshape(-1)
+    self.gym_env.render()
+    self.gym_env.state = old_s
+    return
 
 class Mars(Environment):
   def __init__(self):
@@ -113,6 +229,7 @@ class Mars(Environment):
   def sample_states(self, N):
     return np.random.randint(8 + 1, size=(N, self.sdim, 1))
 
+"""
 class FrozenLake(Environment):
   def __init__(self):
     self.smin = make3D([0.0, -1.0, 0.0, -1.0], 4)
@@ -207,7 +324,8 @@ class FrozenLake(Environment):
     (d, p) = normal_dist(self.S, self.dn, Sinv=self.Sinv)
     cp = np.cumsum(p) / np.sum(p)
     r = np.random.rand(s.shape[0])
-    idx = fortran.sample_from_cp(cp, r)
+    #idx = fortran.sample_from_cp(cp, r)
+    idx = None
     
     s = s + d[idx, 0:self.sdim]
     s = np.clip(s, self.smin, self.smax)
@@ -223,6 +341,7 @@ class FrozenLake(Environment):
 
     ns = stack2D(ns, layer_nb)
     return (ns, p[idx])
+"""
 
 
 class DiscreteEnvironment(Environment):

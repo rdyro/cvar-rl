@@ -4,6 +4,7 @@ from __future__ import print_function
 import sys, os
 sys.path.append(os.path.dirname(__file__) + "../src")
 from tf_util import *
+from util import *
 
 # test stack2D, unstack2D
 A = np.ones((10, 2, 5))

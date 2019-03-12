@@ -30,14 +30,19 @@ class ModelValueFunction(ValueFunction):
     old_v = self.model.predict(s_2D)
     dv = np.linalg.norm(v_2D - old_v)
 
-    self.model.train(s_2D, v_2D)
+    self.model.train(s_2D, v_2D, 250)
     return dv
 
   def qvalue(self, environment, s, a):
     assert self.sdim == environment.sdim
     s = make3D(s, environment.sdim)
     a = make3D(a, environment.adim)
-    (ns, p) = environment.next_state_full(s, a)
+    try:
+      (ns, p) = environment.next_state_full(s, a)
+    except:
+      (ns, _) = environment.next_state_sample(s, a)
+      p = make3D(np.repeat(1.0, ns.shape[0]), 1)
+
     ns = make3D(ns, self.sdim)
 
     (s, a, ns) = match_03(s, a, ns)
@@ -48,9 +53,9 @@ class ModelValueFunction(ValueFunction):
     v = np.dstack([v_2D[(s.shape[0] * i):(s.shape[0] * (i + 1)), :] for i in
       range(ns.shape[2])])
 
-    term_mask = environment.is_terminal(s)
+    term_mask = environment.is_terminal(ns)
     expected_v = make3D(
-        np.sum(p * (1.0 - term_mask) * (r + environment.gamma * v), 
+        np.sum(p * (r + (1.0 - term_mask) * environment.gamma * v), 
           axis=2), 1)
     return expected_v
 

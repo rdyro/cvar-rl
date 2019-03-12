@@ -58,4 +58,22 @@ def is_in_discrete(s, points, gridn, smin, smax):
   mask = np.any(np.array([np.all(np.equal(sd, make3D(point, 2)), axis=1)
     for point in points]), axis=0).reshape((s.shape[0], 1, s.shape[2]))
   return mask
+
+def unstack2D(x):
+  x = np.array(x)
+  x = x if len(x.shape) != 1 else x.reshape((-1, 1))
+  layer_nb = x.shape[2] if len(x.shape) == 3 else 1
+  x = (np.vstack([x[:, :, i] for i in range(x.shape[2])]) if
+      len(x.shape) == 3 else x.reshape((-1, x.shape[1])))
+  return (x, layer_nb)
+
+def stack2D(x, layer_nb):
+  x = np.array(x)
+  assert len(x.shape) <= 2 or x.shape[2] == 1
+  x = x if len(x.shape) == 2 else x.reshape((-1, 1))
+  assert x.shape[0] % layer_nb == 0
+  rows_per_layer = x.shape[0] // layer_nb
+  x = np.dstack([x[(i * rows_per_layer):((i + 1) * rows_per_layer), :] for i in
+    range(layer_nb)])
+  return x
 ###############################################################################

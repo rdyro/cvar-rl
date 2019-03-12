@@ -80,7 +80,8 @@ class NNModel:
   def train(self, x, y, times=-1, batch_frac=0.01):
     assert self.sess != None
     train_till_convergence_or_for(self.sess, self.loss_, self.train_,
-        [self.x_, self.y_, self.kp_], [x, y, 1.0], [True, True, False])
+        [self.x_, self.y_, self.kp_], [x, y, 1.0], [True, True, False],
+        times=times, batch_frac=batch_frac)
 
   def predict(self, x):
     return self.sess.run(self.pred_, feed_dict={self.x_: x, self.kp_: 1.0})

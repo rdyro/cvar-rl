@@ -62,6 +62,37 @@ class ModelDiscreteSolver(Solver):
     dv = self.value_function.set_value(self.all_s, expected_v)
 
     return dv
+
+class ModelSampleSolver(Solver):
+  def __init__(self, environment, policy, N, model_str):
+    super().__init__(environment, policy)
+
+    if model_str == "nn":
+      model = mod.NNModel(environment.sdim, environment.adim, np.repeat(32, 2))
+      sess = tf.Session()
+      sess.run(tf.global_variables_initializer())
+      model.set_session(sess)
+    elif model_str == "polyls":
+      model = mod.PolyLSModel(environment.sdim, environment.adim, 10, mix=True)
+    else:
+      raise NotImplementedError
+
+    self.value_function = val.ModelValueFunction(environment.smin,
+        environment.smax, model)
+    self.environment = environment
+    self.N = N
+    self.all_s = self.environment.sample_states(self.N)
+    #self.all_s = self.environment.sample_states(int(1e3))
+    self.policy.set_environment(self.environment)
+    self.policy.set_value_function(self.value_function)
+
+  def iterate(self):
+    self.all_s = self.environment.sample_states(self.N)
+    a = self.policy.choose_action(self.all_s)
+    expected_v = self.value_function.qvalue(self.environment, self.all_s, a)
+    dv = self.value_function.set_value(self.all_s, expected_v)
+
+    return dv
  
 class PolicyGradientDiscreteSolver(Solver):
   def __init__(self, environment, n, **kwargs):
@@ -100,6 +131,18 @@ class PolicyGradientDiscreteSolver(Solver):
       r = np.dstack([r, nr])
     # delete last state
     s = s[:, :, :-1]
+
+    print("Printing a single episode")
+    S = s[0, :, :].transpose((1, 0))
+    A = a[0, :, :].transpose((1, 0))
+    R = r[0, :, :].transpose((1, 0))
+    for i in range(A.shape[0]):
+      print(S[i, :], end="")
+      print(" -> ", end="")
+      print(A[i, :], end="")
+      print(" -> ", end="")
+      print(R[i, :], end="")
+      print()
     return (s, a, r)
 
   def _mc_gt(self, r):

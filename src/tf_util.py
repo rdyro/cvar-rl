@@ -53,24 +53,6 @@ def batch_idx(n, N, min_nb=100):
   N = int(np.ceil(N))
   return np.random.randint(N, size=n) if n <= N else np.arange(N)
 
-def unstack2D(x):
-  x = np.array(x)
-  x = x if len(x.shape) != 1 else x.reshape((-1, 1))
-  layer_nb = x.shape[2] if len(x.shape) == 3 else 1
-  x = (np.vstack([x[:, :, i] for i in range(x.shape[2])]) if
-      len(x.shape) == 3 else x.reshape((-1, x.shape[1])))
-  return (x, layer_nb)
-
-def stack2D(x, layer_nb):
-  x = np.array(x)
-  assert len(x.shape) <= 2 or x.shape[2] == 1
-  x = x if len(x.shape) == 2 else x.reshape((-1, 1))
-  assert x.shape[0] % layer_nb == 0
-  rows_per_layer = x.shape[0] // layer_nb
-  x = np.dstack([x[(i * rows_per_layer):((i + 1) * rows_per_layer), :] for i in
-    range(layer_nb)])
-  return x
-
 def train_till_convergence_or_for(sess, loss_, train_, plhs, vals,
     is_data=True, **kwargs):
   assert len(plhs) == len(vals)
@@ -96,7 +78,7 @@ def train_till_convergence_or_for(sess, loss_, train_, plhs, vals,
         else:
           raise NotImplementedError
       else:
-        feed_dict[phls[i]] = vals[i]
+        feed_dict[plhs[i]] = vals[i]
     #feed_dict = dict(zip(plhs, [vals[i][idx, :] if is_data[i] else vals[i] for
     #i in range(len(vals))]))
     (loss, _) = sess.run([loss_, train_], feed_dict=feed_dict)
