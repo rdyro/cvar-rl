@@ -33,7 +33,7 @@ class GymWrapper(Environment):
     self.gym_env = gym.make(env_name).env
     self.gym_env.reset()
 
-    self.gamma = 0.95
+    self.gamma = 1.0
 
     self.is_adiscrete = isinstance(self.gym_env.action_space,
         gym.spaces.Discrete)

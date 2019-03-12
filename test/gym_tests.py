@@ -77,6 +77,7 @@ for i in range(N):
     cp2.render(S[i, :, j])
 """
 
+"""
 cp2 = env.GymWrapper("CartPole-v1")
 cp2.smin = np.clip(cp2.smin, -5.0, 5.0)
 cp2.smax = np.clip(cp2.smax, -5.0, 5.0)
@@ -87,12 +88,25 @@ policy = pol.OptimalDiscretePolicy(cp2.sdim, cp2.amin, cp2.amax, cp2.amax + 1)
 solver = sol.ModelSampleSolver(cp2, policy, 5000, "nn")
 for i in range(40):
   print(solver.iterate())
+"""
+
+cp = env.GymWrapper("CartPole-v1")
+solver = sol.PolicyGradientDiscreteSolver(cp, 2, episodes_nb=10, baseline=True,
+    normalize_adv=True)
+
+for i in range(10):
+  print(solver.iterate())
 
 while True:
-  s = cp2.sample_states(1, True)
-  for i in range(100):
-    a = policy.choose_action(s)
-    (ns, _) = cp2.next_state_sample(s, a)
+  s = cp.sample_states(1)
+  done = False
+  total_r = 0.0
+  while done == False:
+    a = solver.policy.choose_action(s)
+    (ns, _) = cp.next_state_sample(s, a)
+    done = cp.is_terminal(ns)
+    total_r += cp.reward(s, a, ns)
     s = ns
-    cp2.render(s)
+    cp.render(s)
     time.sleep(1 / 60)
+  print("total_r = ", total_r)
