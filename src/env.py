@@ -89,15 +89,11 @@ class GymWrapper(Environment):
 
     return (make3D(ns, self.sdim), make3D(np.repeat(1.0, ns.shape[0]), 1))
 
-  def sample_states(self, N, init=False):
-    #if init:
+  def sample_states(self, N):
     envs = [copy(self.gym_env) for i in range(N)]
     [envs[i].reset() for i in range(N)]
     s = make3D(np.vstack([envs[i].state.reshape((1, -1)) for i in range(N)]), 
         self.sdim)
-    #else:
-    #s = np.random.randn(N, 1, self.adim)
-    #s = s * (self.smax - self.smin) + self.smin
     return s
 
   def reward(self, s, a, ns):
@@ -150,7 +146,7 @@ class Mars(Environment):
     self.amin = make3D([0], self.adim)
     self.amax = make3D([3], self.adim)
 
-    self.holes = np.array([[3, 3], [6, 6]])
+    self.holes = np.array([[3, 0], [3, 1], [3, 3], [3, 4], [3, 5]])
     self.goals = np.array([[0, 0]])
     self.gridn = 9
 
@@ -181,6 +177,7 @@ class Mars(Environment):
     a_full = np.broadcast_to(a, (p.shape[0], a.shape[0], 1))
     for i in self.aspc:
       p[np.all(a_full == i, axis=1).reshape(-1), :, i] += 0.6
+    p = p / make3D(np.sum(p, axis=2), 1)
 
     ns = ns + self.move
     ns = np.clip(ns, self.smin, self.smax)

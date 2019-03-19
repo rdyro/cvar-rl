@@ -30,6 +30,7 @@ def visualize_mars_policy(solver):
   pl.figure()
   pl.quiver(all_s[:, 0].reshape((9, 9)), all_s[:, 1].reshape((9, 9)), 
             U.reshape((9, 9)), V.reshape((9, 9)))
+  
   # value function overlay
   has_baseline = False
   if hasattr(solver, "params") and "baseline" in solver.params:
@@ -46,6 +47,14 @@ def visualize_mars_policy(solver):
     v = solver.value_function.value(all_s)
     all_s = stack2D(all_s, layer_nb)
   pl.imshow(v.reshape((9, 9)), origin="lower")
+  """
+  (X, Y) = np.meshgrid(range(9), range(9))
+  points = list(zip(X.reshape(-1), Y.reshape(-1)))
+  Z = np.array([solver.environment.is_terminal(np.array(points[i])) for i in
+    range(len(points))]).reshape((9, 9))
+  print(Z)
+  pl.imshow(Z.astype(np.float64), origin="lower")
+  """
   pl.colorbar()
 
 # Solver Tests ################################################################
@@ -53,7 +62,7 @@ mars = env.Mars()
 
 policy = pol.OptimalDiscretePolicy(mars.sdim, mars.amin, mars.amax, 4)
 #solver = sol.TabularDiscreteSolver(mars, policy, 9)
-solver = sol.ModelDiscreteSolver(mars, policy, 9, "nn")
+solver = sol.ModelDiscreteSolver(mars, policy, 9, "nn", sample=False)
 #solver = sol.PolicyGradientDiscreteSolver(mars, 4, episodes_nb=100,
 #    episode_len=100, normalize_adv=True, baseline=True, h=3e-2)
 

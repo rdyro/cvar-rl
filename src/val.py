@@ -54,9 +54,14 @@ class ModelValueFunction(ValueFunction):
     v = stack2D(v, layer_nb)
     ns = stack2D(ns, layer_nb)
 
-    term_mask = environment.is_terminal(ns)
+    #term_mask = environment.is_terminal(ns)
+    #expected_v = make3D(
+    #    np.sum(p * (r + (1.0 - term_mask) * environment.gamma * v), 
+    #      axis=2), 1)
+        
+    term_mask = environment.is_terminal(s)
     expected_v = make3D(
-        np.sum(p * (r + (1.0 - term_mask) * environment.gamma * v), 
+        np.sum((1.0 - term_mask) * p * (r + environment.gamma * v), 
           axis=2), 1)
     return expected_v
 
