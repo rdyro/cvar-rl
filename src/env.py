@@ -396,10 +396,13 @@ class Drone2D(gym.Env):
     """
 
     #s = make3D(np.random.rand(self.sdim), self.sdim) * (smax0 - smin0) + smin0
+
+    """
     s = make3D(np.random.rand(self.sdim), self.sdim) * (self.smax_reward -
         self.smin_reward) + self.smin_reward
-
     self.state = s.reshape(-1)
+    """
+    self.state = np.zeros(self.sdim)
     return self.state
   
   def sample_states(self, N):
