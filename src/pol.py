@@ -127,27 +127,33 @@ class OptimalDiscretePolicy(DiscretePolicy):
 
 # policy gradient
 class GaussianPolicy(Policy):
-  def __init__(self, sdim, adim, amin, amax, n, **kwargs):
+  def __init__(self, sdim, adim, amin, amax, **kwargs):
     super().__init__(sdim, adim)
-    self.scope = random_scope()
-    kwargs = dict({"h": 1e-2, "layerN": np.repeat(32, 3)}, **kwargs)
+    self.amin = amin
+    self.amax = amax
+    assert np.size(self.amin) == self.adim
+    assert np.size(self.amax) == self.adim
+    self.amin = make3D(amin, self.adim)
+    self.amax = make3D(amax, self.adim)
 
-    self.scope = (scope if scope != None else
-        str(np.random.randint(np.iinfo(np.int64).max)))
+    self.scope = random_scope()
+    kwargs = dict({"h": 1e-2, "layerN": np.repeat(16, 2)}, **kwargs)
+
     # placeholders
     self.adv_ = tf.placeholder(tf.float32, shape=(None,))
     self.s_ = tf.placeholder(tf.float32, shape=(None, self.sdim))
     self.a_ = tf.placeholder(tf.float32, shape=(None, self.adim))
     # variables
     self.a_mu_ = pred_op(self.s_, kwargs["layerN"], self.scope, self.adim)
-    with tf.variable_scope(scope):
+    with tf.variable_scope(self.scope):
       self.a_logstd_ = tf.get_variable("log_std", dtype=tf.float32, shape=(1,
         self.adim))
     # operations
     self.a_sample_ = (self.a_mu_ + tf.exp(self.a_logstd_) *
         tf.random_normal(tf.shape(self.a_mu_)))
-    self.logprob_ = tf.log(self._prob_(self.a_sample_, self.a_mu_,
-      tf.exp(self.a_logstd_)))
+    #self.logprob_ = tf.log(self._prob_(self.a_sample_, self.a_mu_,
+    #  tf.exp(self.a_logstd_)))
+    self.logprob_ = self._logprob_(self.a_, self.a_mu_, tf.exp(self.a_logstd_))
     self.loss_ = -tf.reduce_mean(self.logprob_ * self.adv_)
     self.train_ = (tf.train.AdamOptimizer(
       learning_rate=kwargs["h"]).minimize(self.loss_))
@@ -156,10 +162,17 @@ class GaussianPolicy(Policy):
 
   def _prob_(self, x_, mu_, std_):
     return ((2 * np.pi * tf.reduce_prod(std_))**(-0.5) * 
-        tf.exp(-0.5 * np.reduce_mean(x_**2 / std_, axis=1)))
+        tf.exp(-0.5 * tf.reduce_mean(x_**2 / std_, axis=1)))
+
+  def _logprob_(self, x_, mu_, std_):
+    M = tf.contrib.distributions.MultivariateNormalDiag(loc=mu_,
+        scale_diag=std_)
+    return M.log_prob(x_)
 
   def set_session(self, sess):
     self.sess = sess
+    sess.run(tf.assign(self.a_logstd_, np.repeat(-1.0, self.adim).reshape((1,
+      -1))))
 
   def train(self, s, a, adv, times=-1, batch_frac=0.01):
     assert self.sess != None
@@ -168,8 +181,10 @@ class GaussianPolicy(Policy):
     (s, _) = unstack2D(s)
     (a, _) = unstack2D(a)
     (adv, _) = unstack2D(adv)
+    adv = adv.reshape(-1)
     train_till_convergence_or_for(self.sess, self.loss_, self.train_,
         [self.s_, self.a_, self.adv_], [s, a, adv], times=times)
+    print("STD is ", self.sess.run(tf.exp(self.a_logstd_)))
 
   def choose_action(self, s):
     assert self.sess != None

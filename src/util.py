@@ -70,6 +70,7 @@ def unstack2D(x):
 def stack2D(x, layer_nb):
   x = np.array(x)
   assert len(x.shape) <= 2 or x.shape[2] == 1
+  x = x.squeeze(axis=2) if len(x.shape) == 3 else x
   x = x if len(x.shape) == 2 else x.reshape((-1, 1))
   assert x.shape[0] % layer_nb == 0
   rows_per_layer = x.shape[0] // layer_nb

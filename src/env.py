@@ -229,121 +229,6 @@ class Mars(Environment):
   def sample_states(self, N):
     return np.random.randint(8 + 1, size=(N, self.sdim, 1))
 
-"""
-class FrozenLake(Environment):
-  def __init__(self):
-    self.smin = make3D([0.0, -1.0, 0.0, -1.0], 4)
-    self.smax = make3D([1.0, 1.0,  1.0,  1.0], 4)
-    self.amin = make3D([0.0, 0.0], 2)
-    self.amax = make3D([0.1, 0.1], 2)
-    self.sdim = 4
-    self.adim = 2
-
-    self.gridn = 8
-    self.holes = np.array([[1, 1], [3, 5], [7, 1], [7, 2], [5, 5], [2, 6], [0,
-      4], [3, 6]])
-    self.goals = np.array([[6, 2]])
-
-    def double_int(x, t, p):
-      a = p
-      return np.hstack([x[:, 1:2], a[:, 0:1], x[:, 3:4], a[:, 1:2]])
-    self.f = double_int
-
-    self.h = 1e-2
-    self.dt = 1e-1
-
-    self.mu = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    self.S = np.eye(self.sdim + self.adim + self.sdim)
-    self.S[self.sdim + 0, self.sdim + 0] = 2
-    self.S[self.sdim + 1, self.sdim + 1] = 2
-    self.Sinv = np.linalg.inv(self.S)
-    self.dn = np.array([1, 1, 1, 1, 5, 5, 1, 1, 1, 1])
-
-    self.gamma = 0.5
-
-  def reward(self, s, a, ns):
-    s = make3D(s, self.sdim)
-    a = make3D(a, self.adim)
-    ns = make3D(ns, self.sdim)
-
-    pos = make3D(s[:, [0, 2]], 2)
-    hole_mask = is_in_discrete(pos, self.holes, self.gridn, self.smin,
-      self.smax)
-    goal_mask = is_in_discrete(pos, self.goals, self.gridn, self.smin,
-      self.smax)
-    return (-1.0 * hole_mask + 1.0 * goal_mask)
-
-  def is_terminal(self, s):
-    s = make3D(s, self.sdim)
-    pos = make3D(s[:, [0, 2]], 2)
-    hole_mask = is_in_discrete(pos, self.holes, self.gridn, self.smin,
-        self.smax)
-    goal_mask = is_in_discrete(pos, self.goals, self.gridn, self.smin,
-        self.smax)
-    return np.logical_or(goal_mask, hole_mask)
-
-  def next_state_full(self, s, a):
-    s = make3D(s, self.sdim)
-    a = make3D(a, self.adim)
-
-    (s, a) = match_03(s, a)
-
-    s = np.clip(s, self.smin, self.smax)
-    a = np.clip(a, self.amin, self.amax)
-
-    (d, p) = normal_dist(self.S, self.dn, Sinv=self.Sinv)
-    d = make3D(d, 2 * self.sdim + self.adim).transpose((2, 1, 0))
-    p = p.reshape((1, 1, -1))
-    
-    s = s + d[:, 0:self.sdim, :]
-    s = np.clip(s, self.smin, self.smax)
-
-    a = a + d[:, self.sdim:(self.sdim + self.adim), :]
-    a = np.clip(a, self.amin, self.amax)
-
-    h = 1e-1
-    ns = rk4_fn(self.f, s, 0.0, self.dt, self.h, a)
-
-    ns = ns + d[:, -self.sdim:, :]
-    ns = np.clip(ns, self.smin, self.smax)
-    return (ns, p)
-
-  def next_state_sample(self, s, a):
-    s = make3D(s, self.sdim)
-    a = make3D(a, self.adim)
-
-    (s, a) = match_03(s, a)
-
-    s = np.clip(s, self.smin, self.smax)
-    a = np.clip(a, self.amin, self.amax)
-
-    (s, layer_nb) = unstack2D(s)
-    (a, layer_nb2) = unstack2D(s)
-    assert layer_nb == layer_nb2
-
-    (d, p) = normal_dist(self.S, self.dn, Sinv=self.Sinv)
-    cp = np.cumsum(p) / np.sum(p)
-    r = np.random.rand(s.shape[0])
-    #idx = fortran.sample_from_cp(cp, r)
-    idx = None
-    
-    s = s + d[idx, 0:self.sdim]
-    s = np.clip(s, self.smin, self.smax)
-
-    a = a + d[idx, self.sdim:(self.sdim + self.adim)]
-    a = np.clip(a, self.amin, self.amax)
-
-    h = 1e-1
-    ns = rk4_fn(self.f, s, 0.0, self.dt, self.h, a)
-
-    ns = ns + d[idx, -self.sdim:]
-    ns = np.clip(ns, self.smin, self.smax)
-
-    ns = stack2D(ns, layer_nb)
-    return (ns, p[idx])
-"""
-
-
 class DiscreteEnvironment(Environment):
   def __init__(self, environment, n):
     self.environment = environment
@@ -406,3 +291,316 @@ class DiscreteEnvironment(Environment):
   def sample_states(self, N):
     return self._s2sd(self.environment.sample_states(N))
 ###############################################################################
+
+from gym import spaces
+
+def drone_du(u, t, p):
+  g = p[0]
+  m = p[1]
+  rl = p[2]
+  rr = p[3]
+  com = p[4]
+  I = p[5]
+  Fmax = p[6]
+  F = p[7]
+
+  Fl = Fmax / 10.0 * F[:, 0:1]
+  Fr = Fmax / 10.0 * F[:, 1:2]
+  x = u[:, 0:1]
+  dx = u[:, 1:2]
+  y = u[:, 2:3]
+  dy = u[:, 3:4]
+  th = u[:, 4:5]
+  dth = u[:, 5:6]
+  du = np.hstack([dx, 
+    -Fl * np.cos(th) / m - Fr * np.cos(th) / m,
+    dy,
+    Fl * np.sin(th) / m + Fr * np.sin(th) / m - g,
+    #Fl * np.sin(th) / m + Fr * np.sin(th) / m,
+    dth,
+    (rl + com) * Fl / I - (rr - com) * Fr / I])
+  return du
+
+class Drone2D(gym.Env):
+  metadata = {
+      'render.modes': ['human', 'rgb_array'],
+      'video.frames_per_second': 30
+      }
+
+  def __init__(self):
+    xmin = -10.0 # (m)
+    xmax = 10.0 # (m)
+
+    ymin = -10.0 # (m)
+    ymax = 10.0 # (m)
+    Tt = 0.5 # characteristic translation time (s)
+    Tr = 0.2 # characteristic rotation time (s)
+
+    self.sdim = 6
+    self.smin = make3D(np.array([xmin, 
+      -(xmax - xmin) / Tt,
+      ymin,
+      -(ymax - ymin) /Tt,
+      0,
+      -(2 * np.pi) / Tr
+      ]), self.sdim)
+    self.smax = make3D(np.array([xmax, 
+      (xmax - xmin) / Tt,
+      ymax,
+      (ymax - ymin) /Tt,
+      2 * np.pi,
+      (2 * np.pi) / Tr
+      ]), self.sdim)
+
+    self.smin_reward = np.copy(self.smin)
+    self.smax_reward = np.copy(self.smax)
+    self.smin_reward[:, [0, 2], :] = -3.0
+    self.smax_reward[:, [0, 2], :] = 3.0
+
+    self.adim = 2
+    self.amin = make3D(np.array([-10.0, -10.0]), self.adim)
+    self.amax = make3D(np.array([10.0, 10.0]), self.adim)
+
+    self.gravity = 9.81 # (m s^-2)
+    self.m = 0.5 # (kg)
+    self.rl = 0.2 # (m)
+    self.rr = 0.2 # (m)
+    self.com = 0.0 # (m)
+    self.I = 5e-3 # (kg m^2)
+    self.Fmax = 100.0 # (N)
+    self.f = drone_du
+
+    self.gamma = 0.99
+
+    # openai gym requirements
+    self.viewer = None
+
+    self.action_space = spaces.Box(low=self.amin.reshape(-1),
+        high=self.amax.reshape(-1))
+    self.observation_space = spaces.Box(low=self.smin.reshape(-1),
+        high=self.smax.reshape(-1))
+
+    self.state = None
+    self.reset()
+
+  def reset(self):
+    smin0 = np.copy(self.smin)
+    smax0 = np.copy(self.smax)
+
+    """
+    smin0.reshape(-1)[0:4] = -1.0 # (m / m s^-1)
+    smax0.reshape(-1)[0:4] = 1.0 # (m / m s^-1)
+
+    smin0.reshape(-1)[4] = np.pi / 2 - 0.3 # (1)
+    smax0.reshape(-1)[4] = np.pi / 2 + 0.3 # (1)
+
+    smin0.reshape(-1)[5] = -0.3 # (s^-1)
+    smax0.reshape(-1)[5] = 0.3 # (s^-1)
+    """
+
+    #s = make3D(np.random.rand(self.sdim), self.sdim) * (smax0 - smin0) + smin0
+    s = make3D(np.random.rand(self.sdim), self.sdim) * (self.smax_reward -
+        self.smin_reward) + self.smin_reward
+
+    self.state = s.reshape(-1)
+    return self.state
+  
+  def sample_states(self, N):
+    smin0 = np.copy(self.smin)
+    smax0 = np.copy(self.smax)
+
+    smin0.reshape(-1)[0:4] = -1.0 # (m / m s^-1)
+    smax0.reshape(-1)[0:4] = 1.0 # (m / m s^-1)
+
+    smin0.reshape(-1)[4] = np.pi / 2 - 0.3 # (1)
+    smax0.reshape(-1)[4] = np.pi / 2 + 0.3 # (1)
+
+    smin0.reshape(-1)[5] = -0.3 # (s^-1)
+    smax0.reshape(-1)[5] = 0.3 # (s^-1)
+    #s = (np.random.rand(N, self.sdim, 1) * 0.5 * (self.smax_reward -
+    #  self.smin_reward) + self.smin_reward + (self.smax_reward +
+    #    self.smin_reward) / 2.0)
+
+    s = np.random.rand(N, self.sdim, 1) * (smax0 - smin0) + smin0
+    return s
+  
+  def next_state_sample(self, s, a):
+    s = make3D(s, self.sdim)
+    a = make3D(a, self.adim)
+
+    (s, a) = match_03(s, a)
+    s = np.clip(s, self.smin, self.smax)
+    a = np.clip(a, self.amin, self.amax)
+
+    (s, layer_nb) = unstack2D(s)
+    (a, _) = unstack2D(a)
+
+    h = 1e-2
+    t = 0.0
+    tn = 1.0 / 60.0
+    p = [self.gravity, self.m, self.rl, self.rr, self.com, self.I, self.Fmax,
+        a]
+    ns = rk4_fn(self.f, s, t, tn, h, p)
+    ns = make3D(ns, self.sdim)
+    ns[:, 4] = np.mod(ns[:, 4], 2 * np.pi)
+
+    ns = stack2D(ns, layer_nb)
+    return (ns, np.ones((ns.shape[0], 1, ns.shape[2])))
+
+  def step(self, a):
+    assert np.prod(np.shape(a)) == self.adim
+    s = self.state
+    (ns, p) = self.next_state_sample(s, a)
+    self.state = ns.reshape(-1)
+    r = self.reward(s, a, ns)
+    return (self.state, r, self.is_terminal(self.state), {})
+
+  def reward(self, s, a, ns):
+    mask = self.is_terminal(ns)
+    distance = np.linalg.norm(np.hstack([
+      ns[:, 0:1],
+      ns[:, 2:3],
+      ns[:, 4:5] - np.pi / 2.0]), axis=1)
+
+    #r = (100.0 - 0.1 * ns[:, 5]**2) * np.logical_not(mask)
+    #r = 1.0 * np.logical_not(mask)
+    r = (50.0 - distance**2) * np.logical_not(mask)
+    return r
+
+  def is_terminal(self, s):
+    s = make3D(s, self.sdim)
+    s0 = s[0, :, :].reshape(-1)
+
+    """
+    desc = ["x", "dx", "y", "dy", "th", "dth"]
+    for i in range(self.sdim):
+      if (s0[i] < self.smin_reward.reshape(-1)[i] or s0[i] > self.smax_reward.reshape(-1)[i]):
+        print("Fails on [%s]" % desc[i])
+    """
+
+    mask = np.logical_or(np.any(s < self.smin_reward, axis=1), 
+        np.any(s > self.smax_reward, axis=1))
+    return mask
+
+  def render2(self, s):
+    s = s.reshape(-1)
+    assert s.size == self.sdim
+    old_s = self.state
+    self.state = s
+    self.render()
+    self.state = old_s
+    return
+
+  def render(self, mode="human", refresh=False):
+    screen_width = 800
+    screen_height = 600
+
+    world_width = self.smax.reshape(-1)[0] - self.smin.reshape(-1)[0]
+    world_scale = screen_width / world_width
+    
+    body_scale = 1.0
+    len_scale = 20
+    width = 20 * body_scale
+    height = 10 * body_scale
+    arm_width = 3 * body_scale
+    arm_rl = 2.0 * self.rl / (self.rl + self.rr) * len_scale * body_scale
+    arm_rr = 2.0 * self.rr / (self.rl + self.rr) * len_scale * body_scale
+    arm_v = height
+    prop_width = 1.5 * (arm_rl + arm_rr) / 2.0
+    leg_h = width / 3.0
+    leg_v = height
+    com_r = body_scale * 2.5
+    com_x = 2.0 * self.com / (self.rl + self.rr) * len_scale * body_scale
+
+    if self.viewer is None or refresh == True:
+      from gym.envs.classic_control import rendering
+      self.viewer = rendering.Viewer(screen_width, screen_height)
+
+      (l, r, t, b) = (-width / 2.0, width / 2.0, height / 2.0, -height / 2.0)
+      body = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
+      body.add_attr(rendering.Transform(translation=(-com_x, 0)))
+
+      # left arm
+      (l, r, t, b) = (-arm_rl, 0, arm_width / 2.0, -arm_width / 2.0)
+      arm_l_h = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
+      arm_l_h.add_attr(rendering.Transform(translation=(-com_x, 0)))
+
+      (l, r, t, b) = (-arm_rl, -arm_rl + arm_width, arm_v, 0)
+      arm_l_v = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
+      arm_l_v.add_attr(rendering.Transform(translation=(-com_x, 0)))
+
+      # right arm
+      (l, r, t, b) = (0, arm_rr, arm_width / 2.0, -arm_width / 2.0)
+      arm_r_h = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
+      arm_r_h.add_attr(rendering.Transform(translation=(-com_x, 0)))
+
+      (l, r, t, b) = (arm_rr, arm_rr - arm_width, arm_v, 0)
+      arm_r_v = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
+      arm_r_v.add_attr(rendering.Transform(translation=(-com_x, 0)))
+
+      # propellers
+      (lx, rx, ly, ry) = (-arm_rl + arm_width / 2.0 - prop_width / 2.0, 
+          -arm_rl + arm_width / 2.0 + prop_width / 2.0, arm_v, arm_v)
+      prop_l = rendering.Line((lx, ly), (rx, ry))
+      prop_l.add_attr(rendering.Transform(translation=(-com_x, 0)))
+
+      (lx, rx, ly, ry) = (arm_rr - arm_width / 2.0 - prop_width / 2.0, 
+          arm_rr - arm_width / 2.0 + prop_width / 2.0, arm_v, arm_v)
+      prop_r = rendering.Line((lx, ly), (rx, ry))
+      prop_r.add_attr(rendering.Transform(translation=(-com_x, 0)))
+
+      # landing leg
+      (lx, rx, ly, ry) = (-width / 2.0, -width / 2.0 + leg_h,
+          -height / 2.0 - leg_v, 0)
+      leg_l = rendering.Line((lx, ly), (rx, ry))
+      leg_l.add_attr(rendering.Transform(translation=(-com_x, 0)))
+
+      (lx, rx, ly, ry) = (width / 2.0 - leg_h, width / 2.0,
+          0, -height / 2.0 - leg_v)
+      leg_r = rendering.Line((lx, ly), (rx, ry))
+      leg_r.add_attr(rendering.Transform(translation=(-com_x, 0)))
+
+      # center of mass
+      com = rendering.make_circle(com_r)
+      com.add_attr(rendering.Transform(translation=(0, 0)))
+      com.set_color(1.0, 1.0, 0.0)
+
+      # add transforms
+      self.trans = rendering.Transform()
+      body.add_attr(self.trans)
+      arm_l_h.add_attr(self.trans)
+      arm_l_v.add_attr(self.trans)
+      arm_r_h.add_attr(self.trans)
+      arm_r_v.add_attr(self.trans)
+      prop_l.add_attr(self.trans)
+      prop_r.add_attr(self.trans)
+      leg_l.add_attr(self.trans)
+      leg_r.add_attr(self.trans)
+      com.add_attr(self.trans)
+
+      # append objects to visualize
+      self.viewer.add_geom(body)
+      self.viewer.add_geom(arm_l_h)
+      self.viewer.add_geom(arm_l_v)
+      self.viewer.add_geom(arm_r_h)
+      self.viewer.add_geom(arm_r_v)
+      self.viewer.add_geom(prop_l)
+      self.viewer.add_geom(prop_r)
+      self.viewer.add_geom(leg_l)
+      self.viewer.add_geom(leg_r)
+      self.viewer.add_geom(com)
+
+    x = self.state[0]
+    y = self.state[2]
+    th = self.state[4]
+    self.trans.set_translation((x - self.smin.reshape(-1)[0]) * world_scale,
+        (y - self.smin.reshape(-1)[2] * screen_height / screen_width) *
+        world_scale)
+    self.trans.set_rotation(-(th - np.pi / 2))
+
+    return self.viewer.render(return_rgb_array=(mode=='rgb_array'))
+
+  def close(self):
+    if self.viewer:
+      self.viewer.close()
+      self.viewer = None

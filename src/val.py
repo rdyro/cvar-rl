@@ -24,13 +24,14 @@ class ModelValueFunction(ValueFunction):
   def set_value(self, s, v):
     s = make3D(s, self.sdim)
     v = make3D(v, self.sdim)
-    s_2D = np.vstack([s[:, :, i] for i in range(s.shape[2])])
-    v_2D = np.vstack([v[:, :, i] for i in range(v.shape[2])])
+    (s, layer_nb) = unstack2D(s)
+    (v, _) = unstack2D(v)
 
-    old_v = self.model.predict(s_2D)
-    dv = np.linalg.norm(v_2D - old_v)
+    old_v = self.model.predict(s)
+    dv = np.linalg.norm(v - old_v)
 
-    self.model.train(s_2D, v_2D, 250)
+    self.model.train(s, v, 250)
+
     return dv
 
   def qvalue(self, environment, s, a):
@@ -48,10 +49,10 @@ class ModelValueFunction(ValueFunction):
     (s, a, ns) = match_03(s, a, ns)
     r = environment.reward(s, a, ns)
 
-    ns_2D = np.vstack([ns[:, :, i] for i in range(ns.shape[2])])
-    v_2D = self.model.predict(ns_2D)
-    v = np.dstack([v_2D[(s.shape[0] * i):(s.shape[0] * (i + 1)), :] for i in
-      range(ns.shape[2])])
+    (ns, layer_nb) = unstack2D(ns)
+    v = self.model.predict(ns)
+    v = stack2D(v, layer_nb)
+    ns = stack2D(ns, layer_nb)
 
     term_mask = environment.is_terminal(ns)
     expected_v = make3D(
@@ -61,10 +62,16 @@ class ModelValueFunction(ValueFunction):
 
   def value(self, s):
     s = make3D(s, self.sdim)
-    s_2D = np.vstack([s[:, :, i] for i in range(s.shape[2])])
-    v_2D = self.model.predict(s_2D)
-    v = np.dstack([v_2D[(s.shape[0] * i):(s.shape[0] * (i + 1))] for i in
-      range(s.shape[2])])
+
+    (s, layer_nb) = unstack2D(s)
+    v = self.model.predict(s)
+    v = stack2D(v, layer_nb)
+
+    #s_2D = np.vstack([s[:, :, i] for i in range(s.shape[2])])
+    #v_2D = self.model.predict(s_2D)
+    #v = np.dstack([v_2D[(s.shape[0] * i):(s.shape[0] * (i + 1))] for i in
+    #  range(s.shape[2])])
+
     return v
 
 class TabularValueFunction(ValueFunction):
