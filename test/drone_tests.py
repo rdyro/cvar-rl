@@ -7,7 +7,6 @@ from util import *
 import env
 import sol
 import pol
-import matplotlib.pyplot as pl
 import gym
 import time
 import tensorflow as tf
