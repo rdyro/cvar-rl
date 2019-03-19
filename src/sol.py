@@ -305,7 +305,8 @@ class PolicyGradientContinuousSolver(Solver):
       assert S[j].shape[2] == A[j].shape[2]
       assert A[j].shape[2] == GT[j].shape[2]
 
-    # print("Rendering a single episode")
+    """
+    print("Rendering a single episode")
     s = S[0].transpose((2, 1, 0))
     a = A[0].transpose((2, 1, 0))
     r = R[0].transpose((2, 1, 0))
@@ -314,6 +315,8 @@ class PolicyGradientContinuousSolver(Solver):
       self.environment.render2(s[i, :, :])
       time.sleep(1.0 / 60.0)
     print("Done rendering a single episode")
+    """
+
 
     s = np.vstack([s.transpose((2, 1, 0)) for s in S])
     a = np.vstack([a.transpose((2, 1, 0)) for a in A])
