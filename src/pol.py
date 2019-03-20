@@ -173,8 +173,8 @@ class GaussianPolicy(Policy):
 
   def set_session(self, sess):
     self.sess = sess
-    sess.run(tf.assign(self.a_logstd_, np.repeat(0.0, self.adim).reshape((1,
-      -1))))
+    sess.run(tf.assign(self.a_logstd_,
+      np.repeat(-2.0, self.adim).reshape((1, -1))))
 
   def train(self, s, a, adv, times=-1, batch_frac=0.01):
     assert self.sess != None

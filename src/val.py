@@ -61,7 +61,7 @@ class ModelValueFunction(ValueFunction):
         
     term_mask = environment.is_terminal(s)
     expected_v = make3D(
-        np.sum((1.0 - term_mask) * p * (r + environment.gamma * v), 
+        np.sum(p * (r + (1.0 - term_mask) * environment.gamma * v), 
           axis=2), 1)
     return expected_v
 

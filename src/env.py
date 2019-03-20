@@ -156,13 +156,14 @@ class Mars(Environment):
     self.move = np.array([[1, 0], [0, 1], [-1, 0], [0, -1]]
         ).reshape((4, 2, 1)).transpose((2, 1, 0))
     self.aspc = np.array([0, 1, 2, 3])
+    self.p_choice = 10.0
 
   def reward(self, s, a, ns):
-    hole_mask = is_in_discrete(ns, self.holes, self.gridn, self.smin,
+    hole_mask = is_in_discrete(s, self.holes, self.gridn, self.smin,
         self.smax)
-    goal_mask = is_in_discrete(ns, self.goals, self.gridn, self.smin,
+    goal_mask = is_in_discrete(s, self.goals, self.gridn, self.smin,
         self.smax)
-    return (-10.0 * hole_mask + 5.0 * goal_mask) 
+    return (0.0 * hole_mask + 5.0 * goal_mask)
 
   def next_state_full(self, s, a):
     s = make3D(s, self.sdim)
@@ -176,7 +177,8 @@ class Mars(Environment):
 
     a_full = np.broadcast_to(a, (p.shape[0], a.shape[0], 1))
     for i in self.aspc:
-      p[np.all(a_full == i, axis=1).reshape(-1), :, i] += 20.0
+      p[np.all(a_full == i, axis=1).reshape(-1), :, i] = (self.p_choice *
+          np.mean(self.p))
     p = p / make3D(np.sum(p, axis=2), 1)
 
     ns = ns + self.move
@@ -196,7 +198,8 @@ class Mars(Environment):
     (_, p) = match_03(ns, self.p)
     a_full = np.broadcast_to(a, (p.shape[0], self.adim, 1))
     for i in self.aspc:
-      p[np.all(a_full == i, axis=1).reshape(-1), :, i] += 0.6
+      p[np.all(a_full == i, axis=1).reshape(-1), :, i] = (self.p_choice *
+          np.mean(self.p))
     cp = (np.cumsum(p, axis=2) / np.sum(p, axis=2).reshape((p.shape[0],
       p.shape[1], 1)))
 
