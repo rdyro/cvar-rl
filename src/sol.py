@@ -74,8 +74,8 @@ class ModelDiscreteSolver(Solver):
 class PolicyGradientDiscreteSolver(Solver):
   def __init__(self, environment, n, **kwargs):
     self.params = dict({"episodes_nb": 5000, "episode_len": 200, "baseline":
-      False, "normalize_adv": False, "h": 3e-2, "layerN": np.repeat(32, 2)},
-      **kwargs)
+      False, "normalize_adv": False, "h": 3e-2, "layerN": np.repeat(32, 2),
+      "scope": None, "baseline_scope": None}, **kwargs)
     policy = pol.SoftmaxPolicy(environment.sdim, environment.adim,
         environment.amin, environment.amax, n, layerN=self.params["layerN"],
         h=self.params["h"])
@@ -85,7 +85,8 @@ class PolicyGradientDiscreteSolver(Solver):
     self.s_ = tf.placeholder(tf.float32, shape=(None, self.environment.sdim))
     
     if self.params["baseline"] == True:
-      self.b_scope = random_scope()
+      self.b_scope = (random_scope() if self.params["baseline_scope"] is None
+          else self.params["baseline_scope"])
       self.b_ = pred_op(self.s_, np.repeat(32, 2), self.b_scope, 1)
       self.b_target_ = tf.placeholder(tf.float32, shape=(None, 1))
       self.b_loss_ = loss_op(self.b_target_, self.b_)
@@ -204,8 +205,8 @@ class PolicyGradientDiscreteSolver(Solver):
 class PolicyGradientContinuousSolver(Solver):
   def __init__(self, environment, **kwargs):
     self.params = dict({"episodes_nb": 100, "episode_len": 200, "baseline":
-      False, "normalize_adv": False, "h": 1e-2, "layerN": np.repeat(16, 2)},
-      **kwargs)
+      False, "normalize_adv": False, "h": 1e-2, "layerN": np.repeat(16, 2),
+      "scope": None, "baseline_scope": None}, **kwargs)
     policy = pol.GaussianPolicy(environment.sdim, environment.adim,
         environment.amin, environment.amax, h=self.params["h"],
         layerN=self.params["layerN"])
@@ -215,7 +216,8 @@ class PolicyGradientContinuousSolver(Solver):
     self.s_ = tf.placeholder(tf.float32, shape=(None, self.environment.sdim))
     
     if self.params["baseline"] == True:
-      self.b_scope = random_scope()
+      self.b_scope = (random_scope() if self.params["baseline_scope"] is None
+          else self.params["baseline_scope"])
       self.b_ = pred_op(self.s_, np.repeat(32, 3), self.b_scope, 1)
       self.b_target_ = tf.placeholder(tf.float32, shape=(None, 1))
       self.b_loss_ = loss_op(self.b_target_, self.b_)

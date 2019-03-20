@@ -94,13 +94,13 @@ d = env.Drone2D()
 #solver = sol.PolicyGradientContinuousSolver(d, 2, episodes_nb=10,
 #    baseline=True, normalize_adv=True)
 solver = sol.PolicyGradientContinuousSolver(d, episodes_nb=50,
-    episode_len=400, h=3e-2, normalize_adv=True, baseline=True)
+    episode_len=200, h=1e-2, normalize_adv=True, baseline=True)
 #solver = sol.PolicyGradientContinuousSolver(d, 2, episodes_nb=100)
 
 for i in range(100):
   (avg_reward, avg_ep_len) = solver.iterate()
   print(i, " -> ", avg_ep_len)
-  if avg_ep_len > 190:
+  if avg_ep_len > 100:
     break
 
 solver.sess.run(tf.assign(solver.policy.a_logstd_, [[1e-5, 1e-5]]))

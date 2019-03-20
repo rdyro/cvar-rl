@@ -176,7 +176,7 @@ class Mars(Environment):
 
     a_full = np.broadcast_to(a, (p.shape[0], a.shape[0], 1))
     for i in self.aspc:
-      p[np.all(a_full == i, axis=1).reshape(-1), :, i] += 0.6
+      p[np.all(a_full == i, axis=1).reshape(-1), :, i] += 20.0
     p = p / make3D(np.sum(p, axis=2), 1)
 
     ns = ns + self.move
@@ -225,6 +225,22 @@ class Mars(Environment):
 
   def sample_states(self, N):
     return np.random.randint(8 + 1, size=(N, self.sdim, 1))
+
+class MarsCVaR(Mars):
+  def __init__(self, value_function):
+    super().__init__()
+    self.value_function = value_function
+    
+  def next_state_full(self, s, a):
+    (ns, p) = super().next_state_full(s, a)
+    (ns, layer_nb) = unstack2D(ns)
+    v = self.value_function.value(ns)
+    ns = stack2D(ns, layer_nb)
+    v = stack2D(v, layer_nb)
+    w = 1e0
+    pp = p * np.exp(-w * v)
+    pp = pp / make3D(np.sum(pp, axis=2), 1)
+    return (ns, pp)
 
 class DiscreteEnvironment(Environment):
   def __init__(self, environment, n):

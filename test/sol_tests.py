@@ -77,10 +77,18 @@ for i in range(all_s.shape[0]):
   #print(p[i, :, :].reshape(-1))
 # end of state samples test ---------------------------------------------------
 
-for i in range(50):
+for i in range(30):
   print(solver.iterate())
 print()
 visualize_mars_policy(solver)
+
+mars_cvar = env.MarsCVaR(solver.value_function)
+policy2 = pol.OptimalDiscretePolicy(mars.sdim, mars.amin, mars.amax, 4)
+solver2 = sol.ModelDiscreteSolver(mars_cvar, policy2, 9, "nn", sample=False)
+for i in range(30):
+  print(solver2.iterate())
+print()
+visualize_mars_policy(solver2)
 
 pl.show()
   

@@ -128,6 +128,8 @@ class OptimalDiscretePolicy(DiscretePolicy):
 # policy gradient
 class GaussianPolicy(Policy):
   def __init__(self, sdim, adim, amin, amax, **kwargs):
+    self.params = dict({"h": 1e-2, "layerN": np.repeat(16, 2), "scope": None},
+        **kwargs)
     super().__init__(sdim, adim)
     self.amin = amin
     self.amax = amax
@@ -136,15 +138,15 @@ class GaussianPolicy(Policy):
     self.amin = make3D(amin, self.adim)
     self.amax = make3D(amax, self.adim)
 
-    self.scope = random_scope()
-    kwargs = dict({"h": 1e-2, "layerN": np.repeat(16, 2)}, **kwargs)
+    self.scope = (random_scope() if self.params["scope"] is None else
+        self.params["scope"])
 
     # placeholders
     self.adv_ = tf.placeholder(tf.float32, shape=(None,))
     self.s_ = tf.placeholder(tf.float32, shape=(None, self.sdim))
     self.a_ = tf.placeholder(tf.float32, shape=(None, self.adim))
     # variables
-    self.a_mu_ = pred_op(self.s_, kwargs["layerN"], self.scope, self.adim)
+    self.a_mu_ = pred_op(self.s_, self.params["layerN"], self.scope, self.adim)
     with tf.variable_scope(self.scope):
       self.a_logstd_ = tf.get_variable("log_std", dtype=tf.float32, shape=(1,
         self.adim))
@@ -156,7 +158,7 @@ class GaussianPolicy(Policy):
     self.logprob_ = self._logprob_(self.a_, self.a_mu_, tf.exp(self.a_logstd_))
     self.loss_ = -tf.reduce_mean(self.logprob_ * self.adv_)
     self.train_ = (tf.train.AdamOptimizer(
-      learning_rate=kwargs["h"]).minimize(self.loss_))
+      learning_rate=self.params["h"]).minimize(self.loss_))
 
     self.sess = None
 
@@ -171,7 +173,7 @@ class GaussianPolicy(Policy):
 
   def set_session(self, sess):
     self.sess = sess
-    sess.run(tf.assign(self.a_logstd_, np.repeat(-1.0, self.adim).reshape((1,
+    sess.run(tf.assign(self.a_logstd_, np.repeat(0.0, self.adim).reshape((1,
       -1))))
 
   def train(self, s, a, adv, times=-1, batch_frac=0.01):
@@ -197,6 +199,8 @@ class GaussianPolicy(Policy):
 
 class SoftmaxPolicy(Policy):
   def __init__(self, sdim, adim, amin, amax, an, **kwargs):
+    self.params = dict({"h": 1e-2, "layerN": np.repeat(32, 3), "scope": None},
+        **kwargs)
     super().__init__(sdim, adim)
     self.amin = amin
     self.amax = amax
@@ -208,8 +212,8 @@ class SoftmaxPolicy(Policy):
         make3D(np.repeat(int(an), self.adim), self.adim))
     self.adim_lin = np.prod(self.an)
 
-    self.scope = random_scope()
-    self.params = dict({"h": 1e-2, "layerN": np.repeat(32, 3)}, **kwargs)
+    self.scope = (random_scope() if self.params["scope"] is None else
+        self.params["scope"])
 
     # placeholders
     self.adv_ = tf.placeholder(tf.float32, shape=(None,))
