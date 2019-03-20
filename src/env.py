@@ -242,6 +242,16 @@ class MarsCVaR(Mars):
     pp = pp / make3D(np.sum(pp, axis=2), 1)
     return (ns, pp)
 
+class MarsAugmentedReward(Mars):
+  def __init__(self, value_function):
+    super().__init__()
+    self.value_function = value_function
+
+  def reward(self, s, a, ns):
+    r = super().reward(s, a, ns)
+    v = self.value_function.value(ns)
+    return r + v
+
 class DiscreteEnvironment(Environment):
   def __init__(self, environment, n):
     self.environment = environment
@@ -341,11 +351,11 @@ class Drone2D(gym.Env):
       }
 
   def __init__(self):
-    xmin = -10.0 # (m)
-    xmax = 10.0 # (m)
+    xmin = -5.0 # (m)
+    xmax = 5.0 # (m)
 
-    ymin = -10.0 # (m)
-    ymax = 10.0 # (m)
+    ymin = -5.0 # (m)
+    ymax = 5.0 # (m)
     Tt = 0.5 # characteristic translation time (s)
     Tr = 0.2 # characteristic rotation time (s)
 
@@ -413,12 +423,10 @@ class Drone2D(gym.Env):
 
     #s = make3D(np.random.rand(self.sdim), self.sdim) * (smax0 - smin0) + smin0
 
-    """
     s = make3D(np.random.rand(self.sdim), self.sdim) * (self.smax_reward -
         self.smin_reward) + self.smin_reward
     self.state = s.reshape(-1)
-    """
-    self.state = np.zeros(self.sdim)
+    #self.state = np.zeros(self.sdim)
     return self.state
   
   def sample_states(self, N):
@@ -446,7 +454,7 @@ class Drone2D(gym.Env):
 
     (s, a) = match_03(s, a)
     s = np.clip(s, self.smin, self.smax)
-    a = np.clip(a, self.amin, self.amax)
+    #a = np.clip(a, self.amin, self.amax)
 
     (s, layer_nb) = unstack2D(s)
     (a, _) = unstack2D(a)
@@ -483,16 +491,16 @@ class Drone2D(gym.Env):
     r = (50.0 - distance**2) * np.logical_not(mask)
     return r
 
-  def is_terminal(self, s):
+  def is_terminal(self, s, say_why=False):
     s = make3D(s, self.sdim)
     s0 = s[0, :, :].reshape(-1)
 
-    """
-    desc = ["x", "dx", "y", "dy", "th", "dth"]
-    for i in range(self.sdim):
-      if (s0[i] < self.smin_reward.reshape(-1)[i] or s0[i] > self.smax_reward.reshape(-1)[i]):
-        print("Fails on [%s]" % desc[i])
-    """
+    if say_why:
+      desc = ["x", "dx", "y", "dy", "th", "dth"]
+      for i in range(self.sdim):
+        if (s0[i] < self.smin_reward.reshape(-1)[i] or s0[i] >
+            self.smax_reward.reshape(-1)[i]):
+          print("Fails on [%s]" % desc[i])
 
     mask = np.logical_or(np.any(s < self.smin_reward, axis=1), 
         np.any(s > self.smax_reward, axis=1))
@@ -514,7 +522,7 @@ class Drone2D(gym.Env):
     world_width = self.smax.reshape(-1)[0] - self.smin.reshape(-1)[0]
     world_scale = screen_width / world_width
     
-    body_scale = 1.0
+    body_scale = 2.0
     len_scale = 20
     width = 20 * body_scale
     height = 10 * body_scale

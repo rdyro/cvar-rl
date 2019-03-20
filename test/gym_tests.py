@@ -91,8 +91,9 @@ for i in range(40):
 """
 
 cp = env.GymWrapper("CartPole-v1")
-solver = sol.PolicyGradientDiscreteSolver(cp, 2, episodes_nb=10, baseline=True,
-    normalize_adv=True)
+solver = sol.PolicyGradientDiscreteSolver(cp, 2, episodes_nb=20,
+    episode_len=200, baseline=False, normalize_adv=True, 
+    layerN=np.repeat(16, 2))
 
 for i in range(10):
   print(solver.iterate())

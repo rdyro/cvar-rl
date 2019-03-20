@@ -91,34 +91,36 @@ for i in range(40):
 """
 
 d = env.Drone2D()
+
 #solver = sol.PolicyGradientContinuousSolver(d, 2, episodes_nb=10,
 #    baseline=True, normalize_adv=True)
-solver = sol.PolicyGradientContinuousSolver(d, episodes_nb=50,
-    episode_len=200, h=1e-2, normalize_adv=True, baseline=True)
+solver = sol.PolicyGradientContinuousSolver(d, episodes_nb=200,
+    episode_len=200, h=1e-2, normalize_adv=True, baseline=False)
 #solver = sol.PolicyGradientContinuousSolver(d, 2, episodes_nb=100)
 
-for i in range(100):
+for i in range(10):
   (avg_reward, avg_ep_len) = solver.iterate()
   print(i, " -> ", avg_ep_len)
   if avg_ep_len > 100:
     break
 
-solver.sess.run(tf.assign(solver.policy.a_logstd_, [[1e-5, 1e-5]]))
+#solver.sess.run(tf.assign(solver.policy.a_logstd_, [[1e-5, 1e-5]]))
 
 while True:
   s = d.sample_states(1)
-  d.com = 0.05
+  #d.com = 0.05
   done = False
   total_r = 0.0
   while done == False:
     a = solver.policy.choose_action(s)
+    #a = [0.5, 0.0]
     (ns, _) = d.next_state_sample(s, a)
-    done = d.is_terminal(ns)
-    print()
-    print(a.reshape(-1))
-    print(d.state.reshape(-1))
-    print(ns.reshape(-1))
-    print(done)
+    done = d.is_terminal(ns, True)
+    #print()
+    #print(a.reshape(-1))
+    #print(d.state.reshape(-1))
+    #print(ns.reshape(-1))
+    #print(done)
     total_r += d.reward(s, a, ns)
     s = ns
     d.render2(s)

@@ -82,6 +82,7 @@ for i in range(30):
 print()
 visualize_mars_policy(solver)
 
+"""
 mars_cvar = env.MarsCVaR(solver.value_function)
 policy2 = pol.OptimalDiscretePolicy(mars.sdim, mars.amin, mars.amax, 4)
 solver2 = sol.ModelDiscreteSolver(mars_cvar, policy2, 9, "nn", sample=False)
@@ -89,9 +90,35 @@ for i in range(30):
   print(solver2.iterate())
 print()
 visualize_mars_policy(solver2)
+"""
+
+mars_aug = env.MarsAugmentedReward(solver.value_function)
+solver3 = sol.PolicyGradientDiscreteSolver(mars_aug, 4, episodes_nb=20,
+    episode_len=20, normalize_adv=True, baseline=True, h=3e-2)
+
+for i in range(30):
+  print(solver3.iterate())
+print()
+visualize_mars_policy(solver3)
 
 pl.show()
   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 """
 all_s = solver.environment.all_states()
