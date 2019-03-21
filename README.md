@@ -1,1 +1,1 @@
-![alt text](https://github.com/robertdyro/cvar-rl/fig/output.gif)
+![gif missing](https://raw.githubusercontent.com/robertdyro/cvar-rl/master/fig/output.gif)
