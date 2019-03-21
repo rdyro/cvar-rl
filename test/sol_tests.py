@@ -102,6 +102,8 @@ for i in range(it_n):
   print(solver.iterate())
 print()
 visualize_mars_policy(solver)
+pl.tight_layout()
+pl.savefig("../fig/mars_normal.png", dpi=200)
 
 mars_cvar = env.MarsCVaR(solver.value_function)
 policy2 = pol.OptimalDiscretePolicy(mars.sdim, mars.amin, mars.amax, 4)
@@ -110,6 +112,8 @@ for i in range(it_n):
   print(solver2.iterate())
 print()
 visualize_mars_policy(solver2)
+pl.tight_layout()
+pl.savefig("../fig/mars_cvar.png", dpi=200)
 
 pl.show()
 

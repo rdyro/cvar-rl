@@ -7,6 +7,20 @@ from util import *
 import env
 import matplotlib.pyplot as pl
 
+environment = env.Mars()
+
+(X, Y) = np.meshgrid(range(9), range(9))
+points = list(zip(X.reshape(-1), Y.reshape(-1)))
+Z = np.array([environment.is_terminal(np.array(points[i])) for i in
+  range(len(points))]).reshape((9, 9))
+print(Z)
+Z = Z.astype(np.float64) * -1
+Z[0, 0] = 1
+pl.imshow(Z, origin="lower")
+pl.tight_layout()
+pl.savefig("../fig/mars.png", dpi=200)
+pl.show()
+
 # Environment Tests ###########################################################
 e = env.Environment()
 

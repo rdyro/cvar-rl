@@ -94,11 +94,11 @@ d = env.Drone2D()
 
 #solver = sol.PolicyGradientContinuousSolver(d, 2, episodes_nb=10,
 #    baseline=True, normalize_adv=True)
-solver = sol.PolicyGradientContinuousSolver(d, episodes_nb=200,
-    episode_len=200, h=1e-2, normalize_adv=True, baseline=True)
+solver = sol.PolicyGradientContinuousSolver(d, episodes_nb=100,
+    episode_len=200, h=3e-2, normalize_adv=True, baseline=False)
 #solver = sol.PolicyGradientContinuousSolver(d, 2, episodes_nb=100)
 
-for i in range(10):
+for i in range(3):
   (avg_reward, avg_ep_len) = solver.iterate()
   print(i, " -> ", avg_ep_len)
   if avg_ep_len > 150:
@@ -111,18 +111,29 @@ while True:
   #d.com = 0.05
   done = False
   total_r = 0.0
-  while done == False:
+  d.com = 0.1
+  d.rl = 0.17
+  d.rr = 0.23
+  d.I = 4e-5
+  d.m = 0.6
+
+  ep_len = 30
+  while done == False and ep_len > 0:
     a = solver.policy.choose_action(s)
     #a = [0.5, 0.0]
     (ns, _) = d.next_state_sample(s, a)
-    done = d.is_terminal(ns, True)
+    #done = d.is_terminal(ns, True)
     #print()
     #print(a.reshape(-1))
     #print(d.state.reshape(-1))
     #print(ns.reshape(-1))
     #print(done)
+    print(s.reshape(-1), a.reshape(-1))
     total_r += d.reward(s, a, ns)
     s = ns
     d.render2(s)
     time.sleep(1 / 60)
+
+    ep_len -= 1
+  break
   print("total_r = ", total_r)

@@ -176,7 +176,7 @@ class GaussianPolicy(Policy):
     sess.run(tf.assign(self.a_logstd_,
       np.repeat(-2.0, self.adim).reshape((1, -1))))
 
-  def train(self, s, a, adv, times=-1, batch_frac=0.01):
+  def train(self, s, a, adv, times=-1, batch_frac=1.0):
     assert self.sess != None
 
     (s, a, adv) = match_03(s, a, adv)
@@ -185,7 +185,8 @@ class GaussianPolicy(Policy):
     (adv, _) = unstack2D(adv)
     adv = adv.reshape(-1)
     train_till_convergence_or_for(self.sess, self.loss_, self.train_,
-        [self.s_, self.a_, self.adv_], [s, a, adv], times=times)
+        [self.s_, self.a_, self.adv_], [s, a, adv], times=times,
+        batch_frac=batch_frac)
     print("STD is ", self.sess.run(tf.exp(self.a_logstd_)))
 
   def choose_action(self, s):
@@ -240,7 +241,7 @@ class SoftmaxPolicy(Policy):
   def set_session(self, sess):
     self.sess = sess
 
-  def train(self, s, a, adv, times=-1, batch_frac=0.01):
+  def train(self, s, a, adv, times=-1, batch_frac=1.0):
     assert self.sess != None
 
     (s, a, adv) = match_03(s, a, adv)
@@ -252,7 +253,8 @@ class SoftmaxPolicy(Policy):
         self.an.reshape(-1))
     adv = adv.reshape(-1)
     train_till_convergence_or_for(self.sess, self.loss_, self.train_,
-        [self.s_, self.a_lin_, self.adv_], [s, a_lin, adv], times=times)
+        [self.s_, self.a_lin_, self.adv_], [s, a_lin, adv], times=times,
+        batch_frac=batch_frac)
 
   def choose_action(self, s):
     assert self.sess != None
